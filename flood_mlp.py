@@ -1,7 +1,7 @@
-import csv
-import random
-import math
 import copy
+import math
+import random
+import csv
 
 
 class MLP:
@@ -434,11 +434,24 @@ def calculate_metrics(y_true, y_pred):
     return {'MSE': mse, 'RMSE': rmse, 'MAE': mae, 'R2': r2}
 
 
-def run_experiment(X, y, hidden_layers, learning_rate, momentum, epochs=500,
-                   activation='sigmoid', weight_init='xavier', l2_reg=0.0, random_seed=None, verbose=False, show_folds=False):
-    """Run a single experiment with the given parameters"""
+def get_optimal_activation(weight_init):
+    """Return the optimal activation function for the given weight initialization"""
+    if weight_init == 'he':
+        return 'relu'
+    elif weight_init == 'xavier':
+        return 'sigmoid'
+    else:
+        return 'sigmoid'  # Default for random and other methods
+
+
+def run_experiment(X, y, hidden_layers, learning_rate, momentum,
+                   activation='sigmoid', weight_init='xavier',
+                   l2_reg=0.0, epochs=500, random_seed=None, verbose=True, show_folds=False):
     if random_seed is not None:
         random.seed(random_seed)
+
+    # Automatically select activation function based on weight initialization
+    activation = get_optimal_activation(weight_init)
 
     # Normalize features
     X_normalized = []
@@ -465,7 +478,8 @@ def run_experiment(X, y, hidden_layers, learning_rate, momentum, epochs=500,
         print(f"\n{'='*80}")
         print(
             f"Hidden: {hidden_layers}, LR: {learning_rate}, Momentum: {momentum}")
-        print(f"Activation: {activation}, Weight Init: {weight_init}")
+        print(
+            f"Activation: {activation}, Weight Init: {weight_init}")
         print(f"{'='*80}")
         print(f"{'Fold':<4} {'Train':<5} {'Val':<4} {'Test':<4} {'Train RMSE':<11} {'Val RMSE':<10} {'Test RMSE':<10} {'Test R²':<8} {'Epochs':<6}")
         print(f"{'-'*80}")
@@ -482,7 +496,7 @@ def run_experiment(X, y, hidden_layers, learning_rate, momentum, epochs=500,
         )
         model.reset_weights(weight_init_method=weight_init)
 
-        # Train model with validation
+        # Train model with validation using the automatically selected activation
         mse_history, val_history = model.train(
             X_train, y_train, X_val=X_val, y_val=y_val, epochs=epochs,
             activation_function=activation, verbose=False, patience=50
@@ -537,7 +551,8 @@ def run_experiment(X, y, hidden_layers, learning_rate, momentum, epochs=500,
             'final_val_loss': val_history[-1] if val_history else 0,
             'train_indices': train_indices,
             'val_indices': val_indices,
-            'test_indices': test_indices
+            'test_indices': test_indices,
+            'activation_used': activation
         })
 
         if show_folds:
@@ -566,12 +581,6 @@ def run_experiment(X, y, hidden_layers, learning_rate, momentum, epochs=500,
               f"{sum(test_rmse_values)/len(test_rmse_values):<10.4f} "
               f"{sum(test_r2_values)/len(test_r2_values):<8.4f} {'-':<6}")
 
-        print(f"{'Std':<4} {'-':<5} {'-':<4} {'-':<4} "
-              f"{math.sqrt(sum((x - sum(train_rmse_values)/len(train_rmse_values))**2 for x in train_rmse_values)/len(train_rmse_values)):<11.4f} "
-              f"{math.sqrt(sum((x - sum(val_rmse_values)/len(val_rmse_values))**2 for x in val_rmse_values)/len(val_rmse_values)):<10.4f} "
-              f"{math.sqrt(sum((x - sum(test_rmse_values)/len(test_rmse_values))**2 for x in test_rmse_values)/len(test_rmse_values)):<10.4f} "
-              f"{math.sqrt(sum((x - sum(test_r2_values)/len(test_r2_values))**2 for x in test_r2_values)/len(test_r2_values)):<8.4f} {'-':<6}")
-
         print(f"{'='*80}")
 
     # Average metrics across folds
@@ -585,8 +594,8 @@ def run_experiment(X, y, hidden_layers, learning_rate, momentum, epochs=500,
 
 
 def main():
-    """Main function to run systematic MLP experiments with detailed fold information"""
-    print("=== MLP Flood Prediction: Systematic Parameter Study with Detailed 10-Fold CV ===\n")
+    """Main function to run systematic MLP experiments with automatic activation selection"""
+    print("=== MLP Flood Prediction: Automatic Activation Selection Based on Weight Initialization ===\n")
 
     # Load data
     X, y = load_data('flood_data.csv')
@@ -594,24 +603,34 @@ def main():
         return
 
     print(f"Loaded {len(X)} samples with {len(X[0])} features each")
-    print("Using 10-fold cross-validation with detailed fold-by-fold analysis\n")
+    print("Using 10-fold cross-validation with automatic activation selection:")
+    print("- Xavier initialization -> Sigmoid activation")
+    print("- He initialization -> ReLU activation")
+    print("- Random initialization -> Sigmoid activation\n")
 
     # Define smaller parameter ranges for demonstration
     hidden_architectures = [
         [5],
-        [10],
-        [8, 5],
-        [12, 8],
-        [10, 8, 5],
-        [15, 12, 8],
     ]
 
-    learning_rates = [0.001, 0.01, 0.1, 0.2]
-    momentum_rates = [0.0, 0.3, 0.5, 0.7, 0.9]
-    weight_inits = ['xavier', 'he']
+    learning_rates = [0.01]
+    momentum_rates = [0.3]
+    weight_inits = ['xavier']
+    # hidden_architectures = [
+    #     [5],
+    #     [10],
+    #     [8, 5],
+    #     [12, 8],
+    #     [10, 8, 5],
+    #     [15, 12, 8],
+    # ]
+
+    # learning_rates = [0.01, 0.1, 0.2]
+    # momentum_rates = [0.3, 0.5, 0.7, 0.9]
+    # weight_inits = ['xavier', 'he']
 
     print("="*80)
-    print("EXPERIMENT 1: HIDDEN NODES IMPACT WITH DETAILED FOLD ANALYSIS")
+    print("EXPERIMENT 1: HIDDEN NODES IMPACT WITH AUTO ACTIVATION SELECTION")
     print("="*80)
 
     hidden_results = []
@@ -622,22 +641,15 @@ def main():
 
         # Test each architecture with different weight initializations
         for init_method in weight_inits:
-            full_name = f"{exp_name} ({init_method})"
+            activation_used = get_optimal_activation(init_method)
+            full_name = f"{exp_name}"
             print(f"\nTesting {full_name} with detailed 10-fold CV...")
 
             avg_metrics, cv_results = run_experiment(
                 X, y, hidden, learning_rate=0.01, momentum=0.9,
-                activation='sigmoid', weight_init=init_method,
-                l2_reg=0.0, epochs=500, random_seed=42, verbose=False, show_folds=True
+                weight_init=init_method, l2_reg=0.0, epochs=500,
+                random_seed=42, verbose=False, show_folds=True
             )
-
-            # Calculate CV statistics
-            cv_rmse = [fold['test_rmse'] for fold in cv_results]
-            cv_r2 = [fold['test_r2'] for fold in cv_results]
-            rmse_std = math.sqrt(
-                sum((x - avg_metrics['RMSE'])**2 for x in cv_rmse) / len(cv_rmse))
-            r2_std = math.sqrt(
-                sum((x - avg_metrics['R2'])**2 for x in cv_r2) / len(cv_r2))
 
             hidden_results.append({
                 'name': full_name,
@@ -645,22 +657,21 @@ def main():
                 'cv_results': cv_results,
                 'hidden': hidden,
                 'init': init_method,
-                'rmse_std': rmse_std,
-                'r2_std': r2_std
+                'activation': activation_used,
             })
 
             print(
-                f"Overall Results: RMSE={avg_metrics['RMSE']:.4f}±{rmse_std:.4f}, R²={avg_metrics['R2']:.4f}±{r2_std:.4f}" + '\n')
+                f"Overall Results: RMSE={avg_metrics['RMSE']:.4f}, R²={avg_metrics['R2']:.4f}" + '\n')
 
     print("\n" + "="*80)
     print("EXPERIMENT 2: LEARNING RATE IMPACT WITH DETAILED FOLD ANALYSIS")
     print("="*80)
 
     lr_results = []
-    best_hidden = [10, 8]  # Use medium architecture for learning rate testing
+    best_hidden = [8, 5]
 
     for i, lr in enumerate(learning_rates):
-        exp_name = f"LR-{lr}"
+        exp_name = f"Learning_Rate-{lr}"
         print(
             f"\n--- Testing Learning Rate {i+1}/{len(learning_rates)}: {lr} ---")
 
@@ -675,24 +686,14 @@ def main():
                 l2_reg=0.0, epochs=500, random_seed=42, verbose=False, show_folds=True
             )
 
-            # Calculate CV statistics
-            cv_rmse = [fold['test_rmse'] for fold in cv_results]
-            cv_r2 = [fold['test_r2'] for fold in cv_results]
-            rmse_std = math.sqrt(
-                sum((x - avg_metrics['RMSE'])**2 for x in cv_rmse) / len(cv_rmse))
-            r2_std = math.sqrt(
-                sum((x - avg_metrics['R2'])**2 for x in cv_r2) / len(cv_r2))
-
             lr_results.append({
                 'name': full_name,
                 'avg_metrics': avg_metrics,
                 'lr': lr,
                 'init': init_method,
-                'rmse_std': rmse_std,
-                'r2_std': r2_std
             })
             print(
-                f"Overall CV Results: RMSE={avg_metrics['RMSE']:.4f}±{rmse_std:.4f}, R²={avg_metrics['R2']:.4f}±{r2_std:.4f}")
+                f"Overall Results: RMSE={avg_metrics['RMSE']:.4f}, R²={avg_metrics['R2']:.4f}")
 
     print("\n" + "="*80)
     print("EXPERIMENT 3: MOMENTUM RATE IMPACT WITH DETAILED FOLD ANALYSIS")
@@ -717,24 +718,14 @@ def main():
                 l2_reg=0.0, epochs=500, random_seed=42, verbose=False, show_folds=True
             )
 
-            # Calculate CV statistics
-            cv_rmse = [fold['test_rmse'] for fold in cv_results]
-            cv_r2 = [fold['test_r2'] for fold in cv_results]
-            rmse_std = math.sqrt(
-                sum((x - avg_metrics['RMSE'])**2 for x in cv_rmse) / len(cv_rmse))
-            r2_std = math.sqrt(
-                sum((x - avg_metrics['R2'])**2 for x in cv_r2) / len(cv_r2))
-
             momentum_results.append({
                 'name': full_name,
                 'avg_metrics': avg_metrics,
                 'momentum': momentum,
                 'init': init_method,
-                'rmse_std': rmse_std,
-                'r2_std': r2_std
             })
             print(
-                f"Overall CV Results: RMSE={avg_metrics['RMSE']:.4f}±{rmse_std:.4f}, R²={avg_metrics['R2']:.4f}±{r2_std:.4f}")
+                f"Overall Results: RMSE={avg_metrics['RMSE']:.4f}, R²={avg_metrics['R2']:.4f}")
 
     print("\n" + "="*80)
     print("COMPREHENSIVE RESULTS SUMMARY (10-FOLD CROSS-VALIDATION)")
@@ -742,47 +733,46 @@ def main():
 
     print("\n1. HIDDEN ARCHITECTURE RESULTS:")
     print("-" * 80)
-    print(f"{'Architecture':<20} {'Init Method':<10} {'RMSE (±SD)':<15} {'R² (±SD)':<15}")
+    print(f"{'Architecture':<20} {'Init Method':<10} {'RMSE':<15} {'R²':<15}")
     print("-" * 80)
     hidden_results.sort(key=lambda x: x['avg_metrics']['RMSE'])
     for result in hidden_results:
         arch_str = '-'.join(map(str, result['hidden']))
         print(f"{arch_str:<20} {result['init']:<10} "
-              f"{result['avg_metrics']['RMSE']:<6.4f}±{result['rmse_std']:<6.4f} "
-              f"{result['avg_metrics']['R2']:<6.4f}±{result['r2_std']:<6.4f}")
+              f"{result['avg_metrics']['RMSE']:<6.4f}"
+              f"{result['avg_metrics']['R2']:<6.4f}")
 
     print("\n2. LEARNING RATE RESULTS:")
     print("-" * 80)
-    print(f"{'Learning Rate':<15} {'Init Method':<10} {'RMSE (±SD)':<15} {'R² (±SD)':<15}")
+    print(f"{'Learning Rate':<15} {'Init Method':<10} {'RMSE':<15} {'R²':<15}")
     print("-" * 80)
     lr_results.sort(key=lambda x: x['avg_metrics']['RMSE'])
     for result in lr_results:
         print(f"{result['lr']:<15} {result['init']:<10} "
-              f"{result['avg_metrics']['RMSE']:.4f}±{result['rmse_std']:.4f:<6} "
-              f"{result['avg_metrics']['R2']:.4f}±{result['r2_std']:.4f}")
+              f"{result['avg_metrics']['RMSE']:<6.4f} {result['avg_metrics']['R2']:<6.4f}")
 
     print("\n3. MOMENTUM RESULTS:")
     print("-" * 80)
-    print(f"{'Momentum':<15} {'Init Method':<10} {'RMSE (±SD)':<15} {'R² (±SD)':<15}")
+    print(f"{'Momentum':<15} {'Init Method':<10} {'RMSE':<15} {'R²':<15}")
     print("-" * 80)
     momentum_results.sort(key=lambda x: x['avg_metrics']['RMSE'])
     for result in momentum_results:
         print(f"{result['momentum']:<15} {result['init']:<10} "
-              f"{result['avg_metrics']['RMSE']:.4f}±{result['rmse_std']:.4f:<6} "
-              f"{result['avg_metrics']['R2']:.4f}±{result['r2_std']:.4f}")
+              f"{result['avg_metrics']['RMSE']:<6.4f}"
+              f"{result['avg_metrics']['R2']:<6.4f}")
 
     # Find overall best result
     all_results = hidden_results + lr_results + momentum_results
     overall_best = min(all_results, key=lambda x: x['avg_metrics']['RMSE'])
 
     print("\n" + "="*110)
-    print("OVERALL BEST CONFIGURATION (10-FOLD CV):")
+    print("OVERALL BEST CONFIGURATION :")
     print(f"Configuration: {overall_best['name']}")
     print(
-        f"RMSE: {overall_best['avg_metrics']['RMSE']:.4f} ± {overall_best['rmse_std']:.4f}")
+        f"RMSE: {overall_best['avg_metrics']['RMSE']:.4f}")
     print(f"MAE: {overall_best['avg_metrics']['MAE']:.4f}")
     print(
-        f"R²: {overall_best['avg_metrics']['R2']:.4f} ± {overall_best['r2_std']:.4f}")
+        f"R²: {overall_best['avg_metrics']['R2']:.4f}")
     print("="*110)
 
 
