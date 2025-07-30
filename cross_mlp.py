@@ -1,4 +1,3 @@
-import csv
 import random
 import math
 import copy
@@ -88,35 +87,6 @@ class MLP:
         """Derivative of the sigmoid function"""
         return x * (1.0 - x)
 
-    def _tanh(self, x):
-        """Tanh activation function with improved overflow handling"""
-        x = max(-500, min(500, x))  # Clamp to prevent overflow
-        try:
-            exp_2x = math.exp(2 * x)
-            return (exp_2x - 1) / (exp_2x + 1)
-        except OverflowError:
-            return 1.0 if x > 0 else -1.0
-
-    def _tanh_derivative(self, x):
-        """Derivative of the tanh function"""
-        return 1.0 - x * x
-
-    def _relu(self, x):
-        """ReLU activation function"""
-        return max(0, x)
-
-    def _relu_derivative(self, x):
-        """Derivative of the ReLU function"""
-        return 1.0 if x > 0 else 0.0
-
-    def _leaky_relu(self, x, alpha=0.01):
-        """Leaky ReLU activation function"""
-        return max(alpha * x, x)
-
-    def _leaky_relu_derivative(self, x, alpha=0.01):
-        """Derivative of the Leaky ReLU function"""
-        return 1.0 if x > 0 else alpha
-
     def _forward(self, inputs, activation_function='sigmoid'):
         """Forward pass through the network with improved gradient tracking"""
         self.activations = [inputs[:]]
@@ -138,12 +108,6 @@ class MLP:
                 # Apply activation function
                 if activation_function == 'sigmoid':
                     output = self._sigmoid(weighted_sum)
-                elif activation_function == 'tanh':
-                    output = self._tanh(weighted_sum)
-                elif activation_function == 'relu':
-                    output = self._relu(weighted_sum)
-                elif activation_function == 'leaky_relu':
-                    output = self._leaky_relu(weighted_sum)
                 else:
                     raise ValueError(
                         f"Unsupported activation function: {activation_function}")
@@ -165,13 +129,6 @@ class MLP:
             if activation_function == 'sigmoid':
                 delta = error * \
                     self._sigmoid_derivative(self.activations[-1][i])
-            elif activation_function == 'tanh':
-                delta = error * self._tanh_derivative(self.activations[-1][i])
-            elif activation_function == 'relu':
-                delta = error * self._relu_derivative(self.z_values[-1][i])
-            elif activation_function == 'leaky_relu':
-                delta = error * \
-                    self._leaky_relu_derivative(self.z_values[-1][i])
             else:
                 raise ValueError(
                     f"Unsupported activation function: {activation_function}")
@@ -195,18 +152,6 @@ class MLP:
                     delta = error * \
                         self._sigmoid_derivative(
                             self.activations[layer_idx + 1][neuron_idx])
-                elif activation_function == 'tanh':
-                    delta = error * \
-                        self._tanh_derivative(
-                            self.activations[layer_idx + 1][neuron_idx])
-                elif activation_function == 'relu':
-                    delta = error * \
-                        self._relu_derivative(
-                            self.z_values[layer_idx][neuron_idx])
-                elif activation_function == 'leaky_relu':
-                    delta = error * \
-                        self._leaky_relu_derivative(
-                            self.z_values[layer_idx][neuron_idx])
                 else:
                     raise ValueError(
                         f"Unsupported activation function: {activation_function}")
@@ -342,35 +287,6 @@ class MLP:
             return predictions.index(max(predictions))
         else:
             return [pred.index(max(pred)) for pred in predictions]
-
-
-def load_data(file_path):
-    """Load data from a CSV file and return features and targets"""
-    X = []
-    y = []
-
-    try:
-        with open(file_path, 'r', encoding='utf-8') as file:
-            reader = csv.DictReader(file)
-            for row in reader:
-                features = [
-                    float(row["S1_t-3"]),
-                    float(row["S1_t-2"]),
-                    float(row["S1_t-1"]),
-                    float(row["S1_t-0"]),
-                    float(row["S2_t-3"]),
-                    float(row["S2_t-2"]),
-                    float(row["S2_t-1"]),
-                    float(row["S2_t-0"]),
-                ]
-                target = [float(row["target"])]
-                X.append(features)
-                y.append(target)
-    except FileNotFoundError:
-        print(f"File {file_path} not found. Please check the path.")
-        return None, None
-
-    return X, y
 
 
 def load_pat_data(file_path):
@@ -539,7 +455,7 @@ def print_confusion_matrix(confusion_matrix, class_names=None):
         print()
 
 
-def run_classification_experiment(X, y, hidden_layers, learning_rate, momentum, epochs=500,
+def run_classification_experiment(X, y, hidden_layers, learning_rate, momentum, epochs=1000,
                                   activation='sigmoid', weight_init='xavier', l2_reg=0.0,
                                   random_seed=None, verbose=False):
     """Run a classification experiment with the given parameters"""
@@ -639,33 +555,31 @@ def main_classification():
 
     # Define parameter ranges for systematic testing
     hidden_architectures = [
-        [3],           # Single layer - small
-        [5],           # Single layer - medium
-        [8],           # Single layer - large
-        [4, 3],        # Two layers - small
-        [6, 4],        # Two layers - medium
-        [8, 5],        # Two layers - large
-        [6, 4, 3],     # Three layers - medium
-        [8, 6, 4],     # Three layers - large
+        [5],
+        [10],
+        [8, 5],
+        [12, 8],
+        [10, 8, 5],
+        [15, 12, 8],
     ]
 
-    learning_rates = [0.01, 0.05, 0.1, 0.2, 0.5]
-    momentum_rates = [0.0, 0.3, 0.5, 0.7, 0.9]
-    weight_inits = ['xavier', 'he', 'random']
+    learning_rates = [0.01, 0.1, 0.2]
+    momentum_rates = [0.3, 0.5, 0.7, 0.9]
+    weight_inits = ['xavier', 'he']
 
     print("="*80)
-    print("EXPERIMENT 1: HIDDEN ARCHITECTURE IMPACT (10-FOLD CV)")
+    print("EXPERIMENT 1: HIDDEN LAYER")
     print("="*80)
 
     hidden_results = []
     for i, hidden in enumerate(hidden_architectures):
         exp_name = f"Hidden-{'-'.join(map(str, hidden))}"
-        print(f"\n--- Testing Architecture {i+1}/8: {hidden} ---")
+        print(f"\n--- Testing Architecture {i+1}/6: {hidden} ---")
 
         # Test each architecture with different weight initializations
         for init_method in weight_inits:
-            full_name = f"{exp_name} ({init_method})"
-            print(f"\nTesting {full_name} with 10-fold CV...")
+            full_name = f"{exp_name}"
+            print(f"\nTesting {full_name} ")
 
             avg_metrics, cv_results = run_classification_experiment(
                 X, y, hidden, learning_rate=0.1, momentum=0.9,
@@ -681,10 +595,10 @@ def main_classification():
             hidden_results.append(
                 (full_name, avg_metrics, hidden, init_method, acc_std))
             print(
-                f"CV Results: Accuracy={avg_metrics['accuracy']:.4f}±{acc_std:.4f}")
+                f"Results: Accuracy={avg_metrics['accuracy']:.4f}")
 
     print("\n" + "="*80)
-    print("EXPERIMENT 2: LEARNING RATE IMPACT (10-FOLD CV)")
+    print("EXPERIMENT 2: LEARNING RATE")
     print("="*80)
 
     lr_results = []
@@ -692,12 +606,12 @@ def main_classification():
 
     for i, lr in enumerate(learning_rates):
         exp_name = f"LR-{lr}"
-        print(f"\n--- Testing Learning Rate {i+1}/5: {lr} ---")
+        print(f"\n--- Testing Learning Rate {i+1}/3: {lr} ---")
 
         # Test each learning rate with different weight initializations
         for init_method in weight_inits:
-            full_name = f"{exp_name} ({init_method})"
-            print(f"\nTesting {full_name} with 10-fold CV...")
+            full_name = f"{exp_name}"
+            print(f"\nTesting {full_name}")
 
             avg_metrics, cv_results = run_classification_experiment(
                 X, y, best_hidden, learning_rate=lr, momentum=0.9,
@@ -713,10 +627,10 @@ def main_classification():
             lr_results.append(
                 (full_name, avg_metrics, lr, init_method, acc_std))
             print(
-                f"CV Results: Accuracy={avg_metrics['accuracy']:.4f}±{acc_std:.4f}")
+                f"Results: Accuracy={avg_metrics['accuracy']:.4f}")
 
     print("\n" + "="*80)
-    print("EXPERIMENT 3: MOMENTUM RATE IMPACT (10-FOLD CV)")
+    print("EXPERIMENT 3: MOMENTUM RATE")
     print("="*80)
 
     momentum_results = []
@@ -724,12 +638,12 @@ def main_classification():
 
     for i, momentum in enumerate(momentum_rates):
         exp_name = f"Momentum-{momentum}"
-        print(f"\n--- Testing Momentum {i+1}/5: {momentum} ---")
+        print(f"\n--- Testing Momentum {i+1}/4: {momentum} ---")
 
         # Test each momentum with different weight initializations
         for init_method in weight_inits:
-            full_name = f"{exp_name} ({init_method})"
-            print(f"\nTesting {full_name} with 10-fold CV...")
+            full_name = f"{exp_name}"
+            print(f"\nTesting {full_name}")
 
             avg_metrics, cv_results = run_classification_experiment(
                 X, y, best_hidden, learning_rate=best_lr, momentum=momentum,
@@ -745,7 +659,7 @@ def main_classification():
             momentum_results.append(
                 (full_name, avg_metrics, momentum, init_method, acc_std))
             print(
-                f"CV Results: Accuracy={avg_metrics['accuracy']:.4f}±{acc_std:.4f}")
+                f"Results: Accuracy={avg_metrics['accuracy']:.4f}")
 
     print("\n" + "="*80)
     print("EXPERIMENT 4: BEST COMBINATIONS WITH CONFUSION MATRICES")
@@ -811,7 +725,7 @@ def main_classification():
             avg_metrics, cv_results = run_classification_experiment(
                 X, y, exp['hidden'], exp['lr'], exp['momentum'],
                 activation='sigmoid', weight_init=exp['init'],
-                l2_reg=0.0, epochs=1500, random_seed=seed, verbose=False
+                l2_reg=0.0, epochs=1000, random_seed=seed, verbose=False
             )
             all_seed_results.append(avg_metrics)
             all_cv_results.extend(cv_results)
@@ -830,7 +744,7 @@ def main_classification():
 
         final_results.append((exp['name'], best_seed_result, acc_std))
 
-        print(f"Final CV Results: Accuracy={final_accuracy:.4f}±{acc_std:.4f}")
+        print(f"Final Results: Accuracy={final_accuracy:.4f}")
 
         # Display confusion matrix for best result
         print_confusion_matrix(best_seed_result['confusion_matrix'], [
@@ -849,38 +763,38 @@ def main_classification():
 
     print("\n1. HIDDEN ARCHITECTURE RESULTS:")
     print("-" * 80)
-    print(f"{'Architecture':<20} {'Init Method':<10} {'Accuracy (±SD)':<15}")
+    print(f"{'Architecture':<20} {'Init Method':<10} {'Accuracy':<15}")
     print("-" * 80)
     hidden_results.sort(key=lambda x: x[1]['accuracy'], reverse=True)
     for name, metrics, arch, init, acc_std in hidden_results:
         arch_str = '-'.join(map(str, arch))
         print(
-            f"{arch_str:<20} {init:<10} {metrics['accuracy']:.4f}±{acc_std:.4f}")
+            f"{arch_str:<20} {init:<10} {metrics['accuracy']:.4f}")
 
     print("\n2. LEARNING RATE RESULTS:")
     print("-" * 80)
-    print(f"{'Learning Rate':<15} {'Init Method':<10} {'Accuracy (±SD)':<15}")
+    print(f"{'Learning Rate':<15} {'Init Method':<10} {'Accuracy':<15}")
     print("-" * 80)
     lr_results.sort(key=lambda x: x[1]['accuracy'], reverse=True)
     for name, metrics, lr, init, acc_std in lr_results:
-        print(f"{lr:<15} {init:<10} {metrics['accuracy']:.4f}±{acc_std:.4f}")
+        print(f"{lr:<15} {init:<10} {metrics['accuracy']:.4f}")
 
     print("\n3. MOMENTUM RESULTS:")
     print("-" * 80)
-    print(f"{'Momentum':<15} {'Init Method':<10} {'Accuracy (±SD)':<15}")
+    print(f"{'Momentum':<15} {'Init Method':<10} {'Accuracy':<15}")
     print("-" * 80)
     momentum_results.sort(key=lambda x: x[1]['accuracy'], reverse=True)
     for name, metrics, momentum, init, acc_std in momentum_results:
         print(
-            f"{momentum:<15} {init:<10} {metrics['accuracy']:.4f}±{acc_std:.4f}")
+            f"{momentum:<15} {init:<10} {metrics['accuracy']:.4f}")
 
     print("\n4. FINAL BEST COMBINATIONS:")
     print("-" * 90)
-    print(f"{'Configuration':<45} {'Accuracy (±SD)':<15}")
+    print(f"{'Configuration':<45} {'Accuracy':<15}")
     print("-" * 90)
     final_results.sort(key=lambda x: x[1]['accuracy'], reverse=True)
     for name, metrics, acc_std in final_results:
-        print(f"{name:<45} {metrics['accuracy']:.4f}±{acc_std:.4f}")
+        print(f"{name:<45} {metrics['accuracy']:.4f}")
 
     # Overall best result
     all_configs = [(name, metrics, None, None, acc_std)
@@ -895,10 +809,10 @@ def main_classification():
     overall_best = max(all_configs, key=lambda x: x[1]['accuracy'])
 
     print("\n" + "="*110)
-    print("OVERALL BEST CONFIGURATION (10-FOLD CV):")
+    print("OVERALL BEST CONFIGURATION:")
     print(f"Configuration: {overall_best[0]}")
     print(
-        f"Accuracy: {overall_best[1]['accuracy']:.4f} ± {overall_best[4]:.4f}")
+        f"Accuracy: {overall_best[1]['accuracy']:.4f}")
 
     # Show final confusion matrix for overall best
     if 'confusion_matrix' in overall_best[1]:

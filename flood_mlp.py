@@ -12,7 +12,7 @@ class MLP:
         self.output_size = output_size
         self.learning_rate = learning_rate
         self.momentum = momentum
-        self.l2_reg = l2_reg  # L2 regularization parameter
+        self.l2_reg = l2_reg
 
         self.layers = [input_size] + hidden_size + [output_size]
         self.num_layers = len(self.layers)
@@ -23,7 +23,7 @@ class MLP:
         self.prev_biases_deltas = []
 
         self.activations = []
-        self.z_values = []  # Store pre-activation values for better gradient computation
+        self.z_values = []
 
         self._initialize_weights()
 
@@ -48,13 +48,6 @@ class MLP:
                 limit = math.sqrt(2.0 / input_size)
                 weights = [
                     [random.gauss(0, limit) for _ in range(input_size)]
-                    for _ in range(output_size)
-                ]
-            elif weight_init_method == 'random':
-                # Improved random initialization with smaller values
-                limit = 0.1
-                weights = [
-                    [random.uniform(-limit, limit) for _ in range(input_size)]
                     for _ in range(output_size)
                 ]
             else:
@@ -88,35 +81,6 @@ class MLP:
         """Derivative of the sigmoid function"""
         return x * (1.0 - x)
 
-    def _tanh(self, x):
-        """Tanh activation function with improved overflow handling"""
-        x = max(-500, min(500, x))  # Clamp to prevent overflow
-        try:
-            exp_2x = math.exp(2 * x)
-            return (exp_2x - 1) / (exp_2x + 1)
-        except OverflowError:
-            return 1.0 if x > 0 else -1.0
-
-    def _tanh_derivative(self, x):
-        """Derivative of the tanh function"""
-        return 1.0 - x * x
-
-    def _relu(self, x):
-        """ReLU activation function"""
-        return max(0, x)
-
-    def _relu_derivative(self, x):
-        """Derivative of the ReLU function"""
-        return 1.0 if x > 0 else 0.0
-
-    def _leaky_relu(self, x, alpha=0.01):
-        """Leaky ReLU activation function"""
-        return max(alpha * x, x)
-
-    def _leaky_relu_derivative(self, x, alpha=0.01):
-        """Derivative of the Leaky ReLU function"""
-        return 1.0 if x > 0 else alpha
-
     def _forward(self, inputs, activation_function='sigmoid'):
         """Forward pass through the network with improved gradient tracking"""
         self.activations = [inputs[:]]
@@ -138,12 +102,6 @@ class MLP:
                 # Apply activation function
                 if activation_function == 'sigmoid':
                     output = self._sigmoid(weighted_sum)
-                elif activation_function == 'tanh':
-                    output = self._tanh(weighted_sum)
-                elif activation_function == 'relu':
-                    output = self._relu(weighted_sum)
-                elif activation_function == 'leaky_relu':
-                    output = self._leaky_relu(weighted_sum)
                 else:
                     raise ValueError(
                         f"Unsupported activation function: {activation_function}")
@@ -165,13 +123,6 @@ class MLP:
             if activation_function == 'sigmoid':
                 delta = error * \
                     self._sigmoid_derivative(self.activations[-1][i])
-            elif activation_function == 'tanh':
-                delta = error * self._tanh_derivative(self.activations[-1][i])
-            elif activation_function == 'relu':
-                delta = error * self._relu_derivative(self.z_values[-1][i])
-            elif activation_function == 'leaky_relu':
-                delta = error * \
-                    self._leaky_relu_derivative(self.z_values[-1][i])
             else:
                 raise ValueError(
                     f"Unsupported activation function: {activation_function}")
@@ -195,18 +146,6 @@ class MLP:
                     delta = error * \
                         self._sigmoid_derivative(
                             self.activations[layer_idx + 1][neuron_idx])
-                elif activation_function == 'tanh':
-                    delta = error * \
-                        self._tanh_derivative(
-                            self.activations[layer_idx + 1][neuron_idx])
-                elif activation_function == 'relu':
-                    delta = error * \
-                        self._relu_derivative(
-                            self.z_values[layer_idx][neuron_idx])
-                elif activation_function == 'leaky_relu':
-                    delta = error * \
-                        self._leaky_relu_derivative(
-                            self.z_values[layer_idx][neuron_idx])
                 else:
                     raise ValueError(
                         f"Unsupported activation function: {activation_function}")
@@ -327,7 +266,6 @@ class MLP:
 
 
 def load_data(file_path):
-    """Load data from a CSV file and return features and targets"""
     X = []
     y = []
 
@@ -422,8 +360,6 @@ def calculate_metrics(y_true, y_pred):
     mse = sum((t - p) ** 2 for t, p in zip(y_true_flat,
               y_pred_flat)) / len(y_true_flat)
     rmse = math.sqrt(mse)
-    mae = sum(abs(t - p)
-              for t, p in zip(y_true_flat, y_pred_flat)) / len(y_true_flat)
 
     y_mean = sum(y_true_flat) / len(y_true_flat)
     ss_tot = sum((t - y_mean) ** 2 for t in y_true_flat)
@@ -431,27 +367,14 @@ def calculate_metrics(y_true, y_pred):
 
     r2 = 1 - (ss_res / ss_tot) if ss_tot != 0 else 0
 
-    return {'MSE': mse, 'RMSE': rmse, 'MAE': mae, 'R2': r2}
-
-
-def get_optimal_activation(weight_init):
-    """Return the optimal activation function for the given weight initialization"""
-    if weight_init == 'he':
-        return 'relu'
-    elif weight_init == 'xavier':
-        return 'sigmoid'
-    else:
-        return 'sigmoid'  # Default for random and other methods
+    return {'MSE': mse, 'RMSE': rmse, 'R2': r2}
 
 
 def run_experiment(X, y, hidden_layers, learning_rate, momentum,
                    activation='sigmoid', weight_init='xavier',
-                   l2_reg=0.0, epochs=500, random_seed=None, verbose=True, show_folds=False):
+                   l2_reg=0.0, epochs=1000, random_seed=None, verbose=True, show_folds=False):
     if random_seed is not None:
         random.seed(random_seed)
-
-    # Automatically select activation function based on weight initialization
-    activation = get_optimal_activation(weight_init)
 
     # Normalize features
     X_normalized = []
@@ -477,11 +400,12 @@ def run_experiment(X, y, hidden_layers, learning_rate, momentum,
     if show_folds:
         print(f"\n{'='*80}")
         print(
-            f"Hidden: {hidden_layers}, LR: {learning_rate}, Momentum: {momentum}")
+            f"Hidden: {hidden_layers}, Learning Rate: {learning_rate}, Momentum: {momentum}")
+
         print(
             f"Activation: {activation}, Weight Init: {weight_init}")
         print(f"{'='*80}")
-        print(f"{'Fold':<4} {'Train':<5} {'Val':<4} {'Test':<4} {'Train RMSE':<11} {'Val RMSE':<10} {'Test RMSE':<10} {'Test R²':<8} {'Epochs':<6}")
+        print(f"{'Fold':<4} {'Train':<5} {'Val':<4} {'Test':<4} {'Test RMSE':<10} {'Test R²':<8} {'Epochs':<6}")
         print(f"{'-'*80}")
 
     for fold_idx, (X_train, y_train, X_val, y_val, X_test, y_test, train_indices, val_indices, test_indices) in enumerate(folds):
@@ -501,20 +425,6 @@ def run_experiment(X, y, hidden_layers, learning_rate, momentum,
             X_train, y_train, X_val=X_val, y_val=y_val, epochs=epochs,
             activation_function=activation, verbose=False, patience=50
         )
-
-        # Calculate training performance
-        train_predictions = []
-        for train_sample in X_train:
-            pred = model.predict(train_sample, activation_function=activation)
-            train_predictions.append(pred)
-        train_metrics = calculate_metrics(y_train, train_predictions)
-
-        # Calculate validation performance
-        val_predictions = []
-        for val_sample in X_val:
-            pred = model.predict(val_sample, activation_function=activation)
-            val_predictions.append(pred)
-        val_metrics = calculate_metrics(y_val, val_predictions)
 
         # Test model
         y_pred_normalized = []
@@ -540,11 +450,8 @@ def run_experiment(X, y, hidden_layers, learning_rate, momentum,
             'train_size': len(X_train),
             'val_size': len(X_val),
             'test_size': len(X_test),
-            'train_rmse': train_metrics['RMSE'],
-            'val_rmse': val_metrics['RMSE'],
             'test_rmse': metrics['RMSE'],
             'test_r2': metrics['R2'],
-            'test_mae': metrics['MAE'],
             'test_mse': metrics['MSE'],
             'epochs_trained': len(mse_history),
             'final_train_loss': mse_history[-1] if mse_history else 0,
@@ -557,27 +464,21 @@ def run_experiment(X, y, hidden_layers, learning_rate, momentum,
 
         if show_folds:
             print(f"{fold_idx+1:<4} {len(X_train):<5} {len(X_val):<4} {len(X_test):<4} "
-                  f"{train_metrics['RMSE']:<11.4f} {val_metrics['RMSE']:<10.4f} "
                   f"{metrics['RMSE']:<10.4f} {metrics['R2']:<8.4f} {len(mse_history):<6}")
 
         if verbose:
             print(
                 f"Fold {fold_idx + 1}: Train={len(X_train)}, Val={len(X_val)}, Test={len(X_test)} | "
-                f"Train RMSE={train_metrics['RMSE']:.4f}, Val RMSE={val_metrics['RMSE']:.4f}, "
                 f"Test RMSE={metrics['RMSE']:.4f}, R²={metrics['R2']:.4f}")
 
     if show_folds:
         print(f"{'-'*80}")
 
         # Calculate and show summary statistics
-        train_rmse_values = [fold['train_rmse'] for fold in cv_results]
-        val_rmse_values = [fold['val_rmse'] for fold in cv_results]
         test_rmse_values = [fold['test_rmse'] for fold in cv_results]
         test_r2_values = [fold['test_r2'] for fold in cv_results]
 
         print(f"{'Avg':<4} {'-':<5} {'-':<4} {'-':<4} "
-              f"{sum(train_rmse_values)/len(train_rmse_values):<11.4f} "
-              f"{sum(val_rmse_values)/len(val_rmse_values):<10.4f} "
               f"{sum(test_rmse_values)/len(test_rmse_values):<10.4f} "
               f"{sum(test_r2_values)/len(test_r2_values):<8.4f} {'-':<6}")
 
@@ -585,7 +486,7 @@ def run_experiment(X, y, hidden_layers, learning_rate, momentum,
 
     # Average metrics across folds
     avg_metrics = {}
-    for metric in ['test_rmse', 'test_r2', 'test_mae', 'test_mse']:
+    for metric in ['test_rmse', 'test_r2', 'test_mse']:
         key = metric.replace('test_', '').upper()
         avg_metrics[key] = sum(fold[metric]
                                for fold in cv_results) / len(cv_results)
@@ -594,60 +495,47 @@ def run_experiment(X, y, hidden_layers, learning_rate, momentum,
 
 
 def main():
-    """Main function to run systematic MLP experiments with automatic activation selection"""
-    print("=== MLP Flood Prediction: Automatic Activation Selection Based on Weight Initialization ===\n")
+    """Main function"""
+    print("\n============================= MLP Flood Prediction =============================\n")
 
     # Load data
     X, y = load_data('flood_data.csv')
     if X is None or y is None:
         return
 
-    print(f"Loaded {len(X)} samples with {len(X[0])} features each")
-    print("Using 10-fold cross-validation with automatic activation selection:")
-    print("- Xavier initialization -> Sigmoid activation")
-    print("- He initialization -> ReLU activation")
-    print("- Random initialization -> Sigmoid activation\n")
+    print(f"Loaded {len(X)} samples with {len(X[0])} features each\n")
 
     # Define smaller parameter ranges for demonstration
     hidden_architectures = [
         [5],
+        [10],
+        [8, 5],
+        [12, 8],
+        [10, 8, 5],
+        [15, 12, 8],
     ]
 
-    learning_rates = [0.01]
-    momentum_rates = [0.3]
-    weight_inits = ['xavier']
-    # hidden_architectures = [
-    #     [5],
-    #     [10],
-    #     [8, 5],
-    #     [12, 8],
-    #     [10, 8, 5],
-    #     [15, 12, 8],
-    # ]
-
-    # learning_rates = [0.01, 0.1, 0.2]
-    # momentum_rates = [0.3, 0.5, 0.7, 0.9]
-    # weight_inits = ['xavier', 'he']
+    learning_rates = [0.01, 0.1, 0.2]
+    momentum_rates = [0.3, 0.5, 0.7, 0.9]
+    weight_inits = ['xavier', 'he']
 
     print("="*80)
-    print("EXPERIMENT 1: HIDDEN NODES IMPACT WITH AUTO ACTIVATION SELECTION")
+    print("EXPERIMENT 1: HIDDEN LAYER")
     print("="*80)
 
     hidden_results = []
     for i, hidden in enumerate(hidden_architectures):
-        exp_name = f"Hidden-{'-'.join(map(str, hidden))}"
+        exp_name = f"Hidden -> {'-'.join(map(str, hidden))}"
         print(
             f"\n--- Testing Architecture {i+1}/{len(hidden_architectures)}: {hidden} ---")
 
         # Test each architecture with different weight initializations
         for init_method in weight_inits:
-            activation_used = get_optimal_activation(init_method)
             full_name = f"{exp_name}"
-            print(f"\nTesting {full_name} with detailed 10-fold CV...")
 
             avg_metrics, cv_results = run_experiment(
                 X, y, hidden, learning_rate=0.01, momentum=0.9,
-                weight_init=init_method, l2_reg=0.0, epochs=500,
+                weight_init=init_method, l2_reg=0.0, epochs=1000,
                 random_seed=42, verbose=False, show_folds=True
             )
 
@@ -657,33 +545,28 @@ def main():
                 'cv_results': cv_results,
                 'hidden': hidden,
                 'init': init_method,
-                'activation': activation_used,
             })
 
-            print(
-                f"Overall Results: RMSE={avg_metrics['RMSE']:.4f}, R²={avg_metrics['R2']:.4f}" + '\n')
-
     print("\n" + "="*80)
-    print("EXPERIMENT 2: LEARNING RATE IMPACT WITH DETAILED FOLD ANALYSIS")
+    print("EXPERIMENT 2: LEARNING RATE")
     print("="*80)
 
     lr_results = []
     best_hidden = [8, 5]
 
     for i, lr in enumerate(learning_rates):
-        exp_name = f"Learning_Rate-{lr}"
+        exp_name = f"Learning Rate -> {lr}"
         print(
             f"\n--- Testing Learning Rate {i+1}/{len(learning_rates)}: {lr} ---")
 
         # Test each learning rate with different weight initializations
         for init_method in weight_inits:
-            full_name = f"{exp_name} ({init_method})"
-            print(f"\nTesting {full_name} with detailed 10-fold CV...")
+            full_name = f"{exp_name} "
 
             avg_metrics, cv_results = run_experiment(
                 X, y, best_hidden, learning_rate=lr, momentum=0.9,
                 activation='sigmoid', weight_init=init_method,
-                l2_reg=0.0, epochs=500, random_seed=42, verbose=False, show_folds=True
+                l2_reg=0.0, epochs=1000, random_seed=42, verbose=False, show_folds=True
             )
 
             lr_results.append({
@@ -692,30 +575,27 @@ def main():
                 'lr': lr,
                 'init': init_method,
             })
-            print(
-                f"Overall Results: RMSE={avg_metrics['RMSE']:.4f}, R²={avg_metrics['R2']:.4f}")
 
     print("\n" + "="*80)
-    print("EXPERIMENT 3: MOMENTUM RATE IMPACT WITH DETAILED FOLD ANALYSIS")
+    print("EXPERIMENT 3: MOMENTUM RATE")
     print("="*80)
 
     momentum_results = []
     best_lr = 0.01  # Use standard learning rate for momentum testing
 
     for i, momentum in enumerate(momentum_rates):
-        exp_name = f"Momentum-{momentum}"
+        exp_name = f"Momentum -> {momentum}"
         print(
             f"\n--- Testing Momentum {i+1}/{len(momentum_rates)}: {momentum} ---")
 
         # Test each momentum with different weight initializations
         for init_method in weight_inits:
-            full_name = f"{exp_name} ({init_method})"
-            print(f"\nTesting {full_name} with detailed 10-fold CV...")
+            full_name = f"{exp_name}"
 
             avg_metrics, cv_results = run_experiment(
                 X, y, best_hidden, learning_rate=best_lr, momentum=momentum,
                 activation='sigmoid', weight_init=init_method,
-                l2_reg=0.0, epochs=500, random_seed=42, verbose=False, show_folds=True
+                l2_reg=0.0, epochs=1000, random_seed=42, verbose=False, show_folds=True
             )
 
             momentum_results.append({
@@ -724,56 +604,66 @@ def main():
                 'momentum': momentum,
                 'init': init_method,
             })
-            print(
-                f"Overall Results: RMSE={avg_metrics['RMSE']:.4f}, R²={avg_metrics['R2']:.4f}")
 
     print("\n" + "="*80)
-    print("COMPREHENSIVE RESULTS SUMMARY (10-FOLD CROSS-VALIDATION)")
+    print("RESULTS SUMMARY")
     print("="*80)
 
     print("\n1. HIDDEN ARCHITECTURE RESULTS:")
     print("-" * 80)
-    print(f"{'Architecture':<20} {'Init Method':<10} {'RMSE':<15} {'R²':<15}")
+    print(f"{'Architecture':<20} {'Init Method':<15} {'RMSE':<15} {'R²':<15}")
     print("-" * 80)
     hidden_results.sort(key=lambda x: x['avg_metrics']['RMSE'])
     for result in hidden_results:
         arch_str = '-'.join(map(str, result['hidden']))
-        print(f"{arch_str:<20} {result['init']:<10} "
-              f"{result['avg_metrics']['RMSE']:<6.4f}"
-              f"{result['avg_metrics']['R2']:<6.4f}")
+        print(f"{arch_str:<20} {result['init']:<12} "
+              f"{result['avg_metrics']['RMSE']:<15.4f}"
+              f"{result['avg_metrics']['R2']:<15.4f}")
 
     print("\n2. LEARNING RATE RESULTS:")
     print("-" * 80)
-    print(f"{'Learning Rate':<15} {'Init Method':<10} {'RMSE':<15} {'R²':<15}")
+    print(f"{'Learning Rate':<15} {'Init Method':<15} {'RMSE':<15} {'R²':<15}")
     print("-" * 80)
     lr_results.sort(key=lambda x: x['avg_metrics']['RMSE'])
     for result in lr_results:
-        print(f"{result['lr']:<15} {result['init']:<10} "
-              f"{result['avg_metrics']['RMSE']:<6.4f} {result['avg_metrics']['R2']:<6.4f}")
+        print(f"{result['lr']:<15} {result['init']:<12} "
+              f"{result['avg_metrics']['RMSE']:<15.4f} {result['avg_metrics']['R2']:<15.4f}")
 
     print("\n3. MOMENTUM RESULTS:")
     print("-" * 80)
-    print(f"{'Momentum':<15} {'Init Method':<10} {'RMSE':<15} {'R²':<15}")
+    print(f"{'Momentum':<15} {'Init Method':<15} {'RMSE':<15} {'R²':<15}")
     print("-" * 80)
     momentum_results.sort(key=lambda x: x['avg_metrics']['RMSE'])
     for result in momentum_results:
-        print(f"{result['momentum']:<15} {result['init']:<10} "
-              f"{result['avg_metrics']['RMSE']:<6.4f}"
-              f"{result['avg_metrics']['R2']:<6.4f}")
+        print(f"{result['momentum']:<15} {result['init']:<12} "
+              f"{result['avg_metrics']['RMSE']:<15.4f}"
+              f"{result['avg_metrics']['R2']:<15.4f}")
 
     # Find overall best result
-    all_results = hidden_results + lr_results + momentum_results
-    overall_best = min(all_results, key=lambda x: x['avg_metrics']['RMSE'])
+    print("\n" + "="*80)
+    print("EXPERIMENT 1: HIDDEN LAYER")
+    best_hidden = min(hidden_results, key=lambda x: x['avg_metrics']['RMSE'])
+    print(f"Best Configuration: {best_hidden['name']}")
+    print(f"Best RMSE: {best_hidden['avg_metrics']['RMSE']:.4f}")
+    print(f"Best R²: {best_hidden['avg_metrics']['R2']:.4f}")
+    print("="*80 + "\n")
 
-    print("\n" + "="*110)
-    print("OVERALL BEST CONFIGURATION :")
-    print(f"Configuration: {overall_best['name']}")
-    print(
-        f"RMSE: {overall_best['avg_metrics']['RMSE']:.4f}")
-    print(f"MAE: {overall_best['avg_metrics']['MAE']:.4f}")
-    print(
-        f"R²: {overall_best['avg_metrics']['R2']:.4f}")
-    print("="*110)
+    print("\n" + "="*80)
+    print("EXPERIMENT 2: LEARNING RATE")
+    best_lr = min(lr_results, key=lambda x: x['avg_metrics']['RMSE'])
+    print(f"Best Configuration: {best_lr['name']}")
+    print(f"Best RMSE: {best_lr['avg_metrics']['RMSE']:.4f}")
+    print(f"Best R²: {best_lr['avg_metrics']['R2']:.4f}")
+    print("="*80 + "\n")
+
+    print("\n" + "="*80)
+    print("EXPERIMENT 3: MOMENTUM RATE")
+    best_momentum = min(
+        momentum_results, key=lambda x: x['avg_metrics']['RMSE'])
+    print(f"Best Configuration: {best_momentum['name']}")
+    print(f"Best RMSE: {best_momentum['avg_metrics']['RMSE']:.4f}")
+    print(f"Best R²: {best_momentum['avg_metrics']['R2']:.4f}\n")
+    print("="*80)
 
 
 if __name__ == "__main__":

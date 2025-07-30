@@ -1,0 +1,261 @@
+=== MLP Classification: Cross.pat Dataset with 10-Fold CV ===
+
+Loaded 200 samples with 2 features each
+Number of classes: 2
+Using 10-fold cross-validation for all experiments
+
+================================================================================
+EXPERIMENT 1: HIDDEN LAYER
+================================================================================
+
+--- Testing Architecture 1/6: [5] ---
+
+Testing Hidden-5 
+Results: Accuracy=0.9600
+
+Testing Hidden-5 
+Results: Accuracy=0.9650
+
+--- Testing Architecture 2/6: [10] ---
+
+Testing Hidden-10 
+Results: Accuracy=0.9650
+
+Testing Hidden-10 
+Results: Accuracy=0.9650
+
+--- Testing Architecture 3/6: [8, 5] ---
+
+Testing Hidden-8-5 
+Results: Accuracy=0.9300
+
+Testing Hidden-8-5 
+Results: Accuracy=0.9450
+
+--- Testing Architecture 4/6: [12, 8] ---
+
+Testing Hidden-12-8 
+Results: Accuracy=0.9250
+
+Testing Hidden-12-8 
+Results: Accuracy=0.9450
+
+--- Testing Architecture 5/6: [10, 8, 5] ---
+
+Testing Hidden-10-8-5 
+Results: Accuracy=0.5450
+
+Testing Hidden-10-8-5 
+Results: Accuracy=0.9100
+
+--- Testing Architecture 6/6: [15, 12, 8] ---
+
+Testing Hidden-15-12-8 
+Results: Accuracy=0.5200
+
+Testing Hidden-15-12-8 
+Results: Accuracy=0.9600
+
+================================================================================
+EXPERIMENT 2: LEARNING RATE
+================================================================================
+
+--- Testing Learning Rate 1/3: 0.01 ---
+
+Testing LR-0.01
+Results: Accuracy=0.8250
+
+Testing LR-0.01
+Results: Accuracy=0.8800
+
+--- Testing Learning Rate 2/3: 0.1 ---
+
+Testing LR-0.1
+Results: Accuracy=0.9150
+
+Testing LR-0.1
+Results: Accuracy=0.9450
+
+--- Testing Learning Rate 3/3: 0.2 ---
+
+Testing LR-0.2
+Results: Accuracy=0.9600
+
+Testing LR-0.2
+Results: Accuracy=0.9500
+
+================================================================================
+EXPERIMENT 3: MOMENTUM RATE
+================================================================================
+
+--- Testing Momentum 1/4: 0.3 ---
+
+Testing Momentum-0.3
+Results: Accuracy=0.8450
+
+Testing Momentum-0.3
+Results: Accuracy=0.8950
+
+--- Testing Momentum 2/4: 0.5 ---
+
+Testing Momentum-0.5
+Results: Accuracy=0.8700
+
+Testing Momentum-0.5
+Results: Accuracy=0.8900
+
+--- Testing Momentum 3/4: 0.7 ---
+
+Testing Momentum-0.7
+Results: Accuracy=0.9250
+
+Testing Momentum-0.7
+Results: Accuracy=0.9150
+
+--- Testing Momentum 4/4: 0.9 ---
+
+Testing Momentum-0.9
+Results: Accuracy=0.9150
+
+Testing Momentum-0.9
+Results: Accuracy=0.9450
+
+================================================================================
+EXPERIMENT 4: BEST COMBINATIONS WITH CONFUSION MATRICES
+================================================================================
+Best Hidden Architecture: [5] with he init
+Best Learning Rate: 0.2 with xavier init
+Best Momentum: 0.9 with he init
+
+--- Testing Best Hidden Architecture ---
+Configuration: Hidden=[5], LR=0.1, Momentum=0.9, Init=he
+Final Results: Accuracy=0.9567
+
+Confusion Matrix:
+==================================================
+Actual\PredictedClass 0   Class 1   
+--------------------------------------------------
+Class 0        96        4         
+Class 1        3         97        
+
+Detailed Metrics:
+Class 0: Precision=0.9717, Recall=0.9594, F1-Score=0.9644
+Class 1: Precision=0.9615, Recall=0.9707, F1-Score=0.9648
+
+--- Testing Best Learning Rate ---
+Configuration: Hidden=[6, 4], LR=0.2, Momentum=0.9, Init=xavier
+Final Results: Accuracy=0.9417
+
+Confusion Matrix:
+==================================================
+Actual\PredictedClass 0   Class 1   
+--------------------------------------------------
+Class 0        97        3         
+Class 1        5         95        
+
+Detailed Metrics:
+Class 0: Precision=0.9552, Recall=0.9689, F1-Score=0.9590
+Class 1: Precision=0.9750, Recall=0.9505, F1-Score=0.9600
+
+--- Testing Best Momentum ---
+Configuration: Hidden=[6, 4], LR=0.1, Momentum=0.9, Init=he
+Final Results: Accuracy=0.9267
+
+Confusion Matrix:
+==================================================
+Actual\PredictedClass 0   Class 1   
+--------------------------------------------------
+Class 0        96        4         
+Class 1        7         93        
+
+Detailed Metrics:
+Class 0: Precision=0.9396, Recall=0.9594, F1-Score=0.9464
+Class 1: Precision=0.9631, Recall=0.9283, F1-Score=0.9404
+
+--- Testing Combined Best Parameters ---
+Configuration: Hidden=[5], LR=0.2, Momentum=0.9, Init=xavier
+Final Results: Accuracy=0.9550
+
+Confusion Matrix:
+==================================================
+Actual\PredictedClass 0   Class 1   
+--------------------------------------------------
+Class 0        96        4         
+Class 1        4         96        
+
+Detailed Metrics:
+Class 0: Precision=0.9661, Recall=0.9618, F1-Score=0.9612
+Class 1: Precision=0.9597, Recall=0.9590, F1-Score=0.9548
+
+==============================================================================================================
+COMPREHENSIVE CLASSIFICATION RESULTS SUMMARY (10-FOLD CROSS-VALIDATION)
+==============================================================================================================
+
+1. HIDDEN ARCHITECTURE RESULTS:
+--------------------------------------------------------------------------------
+Architecture         Init Method Accuracy       
+--------------------------------------------------------------------------------
+5                    he         0.9650
+10                   xavier     0.9650
+10                   he         0.9650
+5                    xavier     0.9600
+15-12-8              he         0.9600
+8-5                  he         0.9450
+12-8                 he         0.9450
+8-5                  xavier     0.9300
+12-8                 xavier     0.9250
+10-8-5               he         0.9100
+10-8-5               xavier     0.5450
+15-12-8              xavier     0.5200
+
+2. LEARNING RATE RESULTS:
+--------------------------------------------------------------------------------
+Learning Rate   Init Method Accuracy       
+--------------------------------------------------------------------------------
+0.2             xavier     0.9600
+0.2             he         0.9500
+0.1             he         0.9450
+0.1             xavier     0.9150
+0.01            he         0.8800
+0.01            xavier     0.8250
+
+3. MOMENTUM RESULTS:
+--------------------------------------------------------------------------------
+Momentum        Init Method Accuracy       
+--------------------------------------------------------------------------------
+0.9             he         0.9450
+0.7             xavier     0.9250
+0.7             he         0.9150
+0.9             xavier     0.9150
+0.3             he         0.8950
+0.5             he         0.8900
+0.5             xavier     0.8700
+0.3             xavier     0.8450
+
+4. FINAL BEST COMBINATIONS:
+------------------------------------------------------------------------------------------
+Configuration                                 Accuracy       
+------------------------------------------------------------------------------------------
+Best Hidden Architecture                      0.9650
+Best Learning Rate                            0.9600
+Combined Best Parameters                      0.9600
+Best Momentum                                 0.9450
+
+==============================================================================================================
+OVERALL BEST CONFIGURATION:
+Configuration: Hidden-5
+Accuracy: 0.9650
+
+Final Confusion Matrix for Best Configuration:
+
+Confusion Matrix:
+==================================================
+Actual\PredictedClass 0   Class 1   
+--------------------------------------------------
+Class 0        96        4         
+Class 1        3         97        
+
+Final Detailed Metrics:
+Class 0: Precision=0.9717, Recall=0.9594, F1-Score=0.9644
+Class 1: Precision=0.9615, Recall=0.9707, F1-Score=0.9648
+==============================================================================================================
