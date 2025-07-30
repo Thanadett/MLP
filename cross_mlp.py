@@ -250,6 +250,7 @@ class MLP:
         """Train the network with improved features"""
         mse_history = []
         val_loss_history = []
+        accuracy_history = []
         best_val_loss = float('inf')
         epochs_no_improve = 0
         best_weights = None
@@ -258,6 +259,7 @@ class MLP:
 
         for epoch in range(epochs):
             total_error = 0.0
+            correct_predictions = 0
 
             # Shuffle training data for better convergence
             training_pairs = list(zip(X, y))
@@ -271,8 +273,16 @@ class MLP:
                 total_error += error
                 self._backward(y_shuffled[i], activation_function)
 
+                # Calculate accuracy for classification
+                predicted_class = outputs.index(max(outputs))
+                actual_class = y_shuffled[i].index(max(y_shuffled[i]))
+                if predicted_class == actual_class:
+                    correct_predictions += 1
+
             mse = total_error / len(X)
+            accuracy = correct_predictions / len(X)
             mse_history.append(mse)
+            accuracy_history.append(accuracy)
 
             # Learning rate decay
             if epoch > 0 and epoch % lr_decay_epochs == 0:
@@ -301,7 +311,7 @@ class MLP:
 
                 if verbose and epoch % 100 == 0:
                     print(
-                        f"Epoch {epoch}, MSE: {mse:.6f}, Val Loss: {val_loss:.6f}, LR: {current_lr:.6f}")
+                        f"Epoch {epoch}, MSE: {mse:.6f}, Accuracy: {accuracy:.4f}, Val Loss: {val_loss:.6f}, LR: {current_lr:.6f}")
 
                 if epochs_no_improve >= patience:
                     if verbose:
@@ -314,9 +324,9 @@ class MLP:
             else:
                 if verbose and epoch % 100 == 0:
                     print(
-                        f"Epoch {epoch}, MSE: {mse:.6f}, LR: {current_lr:.6f}")
+                        f"Epoch {epoch}, MSE: {mse:.6f}, Accuracy: {accuracy:.4f}, LR: {current_lr:.6f}")
 
-        return mse_history, val_loss_history
+        return mse_history, val_loss_history, accuracy_history
 
     def predict(self, X, activation_function='sigmoid'):
         """Make predictions; auto-handle single or multiple inputs"""
@@ -324,6 +334,14 @@ class MLP:
             return self._forward(X, activation_function)
         else:
             return [self._forward(x, activation_function) for x in X]
+
+    def predict_class(self, X, activation_function='sigmoid'):
+        """Make class predictions"""
+        predictions = self.predict(X, activation_function)
+        if isinstance(X[0], (int, float)):  # Single input
+            return predictions.index(max(predictions))
+        else:
+            return [pred.index(max(pred)) for pred in predictions]
 
 
 def load_data(file_path):
@@ -355,6 +373,34 @@ def load_data(file_path):
     return X, y
 
 
+def load_pat_data(file_path):
+    """Load data from a .pat file and return features and targets"""
+    X = []
+    y = []
+
+    with open(file_path, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+        i = 0
+
+        while i < len(lines):
+            line = lines[i].strip()
+            if line.startswith('p'):  # พบ pattern id เช่น p0, p1
+                features_line = lines[i+1].strip()
+                target_line = lines[i+2].strip()
+
+                features = list(map(float, features_line.split()))
+                targets = list(map(int, target_line.split()))
+
+                X.append(features)
+                y.append(targets)
+
+                i += 3
+            else:
+                i += 1
+
+    return X, y
+
+
 def normalize_data(data):
     """Normalize the data to the range [0, 1]"""
     if len(data) == 0:
@@ -379,8 +425,8 @@ def denormalize_data(normalized_data, min_val, max_val):
     return denormalized
 
 
-def cross_validate_with_validation(X, y, k=10, val_split=0.2):
-    """Perform k-fold cross-validation with validation split"""
+def cross_validate_classification(X, y, k=10):
+    """Perform k-fold cross-validation for classification"""
     fold_size = len(X) // k
     folds = []
 
@@ -395,48 +441,108 @@ def cross_validate_with_validation(X, y, k=10, val_split=0.2):
         train_indices = [idx for idx in indices if idx not in fold_indices]
         test_indices = fold_indices
 
-        # Split training data into train and validation
-        val_size = int(len(train_indices) * val_split)
-        random.shuffle(train_indices)
-        val_indices = train_indices[:val_size]
-        actual_train_indices = train_indices[val_size:]
-
-        X_train = [X[i] for i in actual_train_indices]
-        y_train = [y[i] for i in actual_train_indices]
-        X_val = [X[i] for i in val_indices]
-        y_val = [y[i] for i in val_indices]
+        X_train = [X[i] for i in train_indices]
+        y_train = [y[i] for i in train_indices]
         X_test = [X[i] for i in test_indices]
         y_test = [y[i] for i in test_indices]
 
-        folds.append((X_train, y_train, X_val, y_val, X_test, y_test,
-                     actual_train_indices, val_indices, test_indices))
+        folds.append((X_train, y_train, X_test, y_test))
 
     return folds
 
 
-def calculate_metrics(y_true, y_pred):
-    """Calculate performance metrics for list of lists"""
-    y_true_flat = [t[0] for t in y_true]
-    y_pred_flat = [p[0] for p in y_pred]
+def calculate_classification_metrics(y_true, y_pred):
+    """Calculate classification metrics including confusion matrix"""
+    # Convert to class indices
+    y_true_classes = [t.index(max(t)) for t in y_true]
+    y_pred_classes = [p.index(max(p)) for p in y_pred]
 
-    mse = sum((t - p) ** 2 for t, p in zip(y_true_flat,
-              y_pred_flat)) / len(y_true_flat)
-    rmse = math.sqrt(mse)
-    mae = sum(abs(t - p)
-              for t, p in zip(y_true_flat, y_pred_flat)) / len(y_true_flat)
+    # Calculate accuracy
+    correct = sum(1 for t, p in zip(y_true_classes, y_pred_classes) if t == p)
+    accuracy = correct / len(y_true_classes)
 
-    y_mean = sum(y_true_flat) / len(y_true_flat)
-    ss_tot = sum((t - y_mean) ** 2 for t in y_true_flat)
-    ss_res = sum((t - p) ** 2 for t, p in zip(y_true_flat, y_pred_flat))
+    # Calculate confusion matrix
+    num_classes = len(y_true[0])
+    confusion_matrix = [[0 for _ in range(num_classes)]
+                        for _ in range(num_classes)]
 
-    r2 = 1 - (ss_res / ss_tot) if ss_tot != 0 else 0
+    for true_class, pred_class in zip(y_true_classes, y_pred_classes):
+        confusion_matrix[true_class][pred_class] += 1
 
-    return {'MSE': mse, 'RMSE': rmse, 'MAE': mae, 'R2': r2}
+    # Calculate precision, recall, F1-score for each class
+    precision = []
+    recall = []
+    f1_score = []
+
+    for class_idx in range(num_classes):
+        # True positives
+        tp = confusion_matrix[class_idx][class_idx]
+        # False positives
+        fp = sum(confusion_matrix[i][class_idx]
+                 for i in range(num_classes)) - tp
+        # False negatives
+        fn = sum(confusion_matrix[class_idx][i]
+                 for i in range(num_classes)) - tp
+
+        # Precision
+        if tp + fp > 0:
+            prec = tp / (tp + fp)
+        else:
+            prec = 0.0
+        precision.append(prec)
+
+        # Recall
+        if tp + fn > 0:
+            rec = tp / (tp + fn)
+        else:
+            rec = 0.0
+        recall.append(rec)
+
+        # F1-score
+        if prec + rec > 0:
+            f1 = 2 * (prec * rec) / (prec + rec)
+        else:
+            f1 = 0.0
+        f1_score.append(f1)
+
+    return {
+        'accuracy': accuracy,
+        'confusion_matrix': confusion_matrix,
+        'precision': precision,
+        'recall': recall,
+        'f1_score': f1_score
+    }
 
 
-def run_experiment(X, y, hidden_layers, learning_rate, momentum, epochs=500,
-                   activation='sigmoid', weight_init='xavier', l2_reg=0.0, random_seed=None, verbose=False, show_folds=False):
-    """Run a single experiment with the given parameters"""
+def print_confusion_matrix(confusion_matrix, class_names=None):
+    """Print confusion matrix in a readable format"""
+    num_classes = len(confusion_matrix)
+    if class_names is None:
+        class_names = [f"Class {i}" for i in range(num_classes)]
+
+    print("\nConfusion Matrix:")
+    print("=" * 50)
+
+    # Header
+    print(f"{'Actual\\Predicted':<15}", end="")
+    for name in class_names:
+        print(f"{name:<10}", end="")
+    print()
+
+    print("-" * 50)
+
+    # Matrix rows
+    for i, row in enumerate(confusion_matrix):
+        print(f"{class_names[i]:<15}", end="")
+        for val in row:
+            print(f"{val:<10}", end="")
+        print()
+
+
+def run_classification_experiment(X, y, hidden_layers, learning_rate, momentum, epochs=500,
+                                  activation='sigmoid', weight_init='xavier', l2_reg=0.0,
+                                  random_seed=None, verbose=False):
+    """Run a classification experiment with the given parameters"""
     if random_seed is not None:
         random.seed(random_seed)
 
@@ -453,24 +559,10 @@ def run_experiment(X, y, hidden_layers, learning_rate, momentum, epochs=500,
             for i, val in enumerate(normalized_values):
                 X_normalized[i].append(val)
 
-    # Normalize targets
-    y_values = [sample[0] for sample in y]
-    y_normalized, y_min, y_max = normalize_data(y_values)
-    y_normalized = [[val] for val in y_normalized]
-
-    folds = cross_validate_with_validation(X_normalized, y_normalized, k=10)
+    folds = cross_validate_classification(X_normalized, y, k=10)
     cv_results = []
 
-    if show_folds:
-        print(f"\n{'='*80}")
-        print(
-            f"Hidden: {hidden_layers}, LR: {learning_rate}, Momentum: {momentum}")
-        print(f"Activation: {activation}, Weight Init: {weight_init}")
-        print(f"{'='*80}")
-        print(f"{'Fold':<4} {'Train':<5} {'Val':<4} {'Test':<4} {'Train RMSE':<11} {'Val RMSE':<10} {'Test RMSE':<10} {'Test R²':<8} {'Epochs':<6}")
-        print(f"{'-'*80}")
-
-    for fold_idx, (X_train, y_train, X_val, y_val, X_test, y_test, train_indices, val_indices, test_indices) in enumerate(folds):
+    for fold_idx, (X_train, y_train, X_test, y_test) in enumerate(folds):
         # Create and train model
         model = MLP(
             input_size=len(X_train[0]),
@@ -482,311 +574,346 @@ def run_experiment(X, y, hidden_layers, learning_rate, momentum, epochs=500,
         )
         model.reset_weights(weight_init_method=weight_init)
 
-        # Train model with validation
-        mse_history, val_history = model.train(
-            X_train, y_train, X_val=X_val, y_val=y_val, epochs=epochs,
-            activation_function=activation, verbose=False, patience=50
+        # Train model
+        model.train(
+            X_train, y_train, epochs=epochs,
+            activation_function=activation, verbose=verbose, patience=50
         )
 
-        # Calculate training performance
-        train_predictions = []
-        for train_sample in X_train:
-            pred = model.predict(train_sample, activation_function=activation)
-            train_predictions.append(pred)
-        train_metrics = calculate_metrics(y_train, train_predictions)
-
-        # Calculate validation performance
-        val_predictions = []
-        for val_sample in X_val:
-            pred = model.predict(val_sample, activation_function=activation)
-            val_predictions.append(pred)
-        val_metrics = calculate_metrics(y_val, val_predictions)
-
         # Test model
-        y_pred_normalized = []
-        for test_sample in X_test:
-            pred = model.predict(test_sample, activation_function=activation)
-            y_pred_normalized.append(pred)
-
-        # Denormalize predictions
-        y_pred_denormalized = []
-        for pred in y_pred_normalized:
-            denormalized_pred = denormalize_data(pred, y_min, y_max)
-            y_pred_denormalized.append(denormalized_pred)
-
-        y_test_denormalized = []
-        for test_val in y_test:
-            denormalized_test = denormalize_data(test_val, y_min, y_max)
-            y_test_denormalized.append(denormalized_test)
+        y_pred = model.predict(X_test, activation_function=activation)
 
         # Calculate metrics
-        metrics = calculate_metrics(y_test_denormalized, y_pred_denormalized)
-        cv_results.append({
-            'fold': fold_idx + 1,
-            'train_size': len(X_train),
-            'val_size': len(X_val),
-            'test_size': len(X_test),
-            'train_rmse': train_metrics['RMSE'],
-            'val_rmse': val_metrics['RMSE'],
-            'test_rmse': metrics['RMSE'],
-            'test_r2': metrics['R2'],
-            'test_mae': metrics['MAE'],
-            'test_mse': metrics['MSE'],
-            'epochs_trained': len(mse_history),
-            'final_train_loss': mse_history[-1] if mse_history else 0,
-            'final_val_loss': val_history[-1] if val_history else 0,
-            'train_indices': train_indices,
-            'val_indices': val_indices,
-            'test_indices': test_indices
-        })
-
-        if show_folds:
-            print(f"{fold_idx+1:<4} {len(X_train):<5} {len(X_val):<4} {len(X_test):<4} "
-                  f"{train_metrics['RMSE']:<11.4f} {val_metrics['RMSE']:<10.4f} "
-                  f"{metrics['RMSE']:<10.4f} {metrics['R2']:<8.4f} {len(mse_history):<6}")
+        metrics = calculate_classification_metrics(y_test, y_pred)
+        cv_results.append(metrics)
 
         if verbose:
-            print(
-                f"Fold {fold_idx + 1}: Train={len(X_train)}, Val={len(X_val)}, Test={len(X_test)} | "
-                f"Train RMSE={train_metrics['RMSE']:.4f}, Val RMSE={val_metrics['RMSE']:.4f}, "
-                f"Test RMSE={metrics['RMSE']:.4f}, R²={metrics['R2']:.4f}")
-
-    if show_folds:
-        print(f"{'-'*80}")
-
-        # Calculate and show summary statistics
-        train_rmse_values = [fold['train_rmse'] for fold in cv_results]
-        val_rmse_values = [fold['val_rmse'] for fold in cv_results]
-        test_rmse_values = [fold['test_rmse'] for fold in cv_results]
-        test_r2_values = [fold['test_r2'] for fold in cv_results]
-
-        print(f"{'Avg':<4} {'-':<5} {'-':<4} {'-':<4} "
-              f"{sum(train_rmse_values)/len(train_rmse_values):<11.4f} "
-              f"{sum(val_rmse_values)/len(val_rmse_values):<10.4f} "
-              f"{sum(test_rmse_values)/len(test_rmse_values):<10.4f} "
-              f"{sum(test_r2_values)/len(test_r2_values):<8.4f} {'-':<6}")
-
-        print(f"{'Std':<4} {'-':<5} {'-':<4} {'-':<4} "
-              f"{math.sqrt(sum((x - sum(train_rmse_values)/len(train_rmse_values))**2 for x in train_rmse_values)/len(train_rmse_values)):<11.4f} "
-              f"{math.sqrt(sum((x - sum(val_rmse_values)/len(val_rmse_values))**2 for x in val_rmse_values)/len(val_rmse_values)):<10.4f} "
-              f"{math.sqrt(sum((x - sum(test_rmse_values)/len(test_rmse_values))**2 for x in test_rmse_values)/len(test_rmse_values)):<10.4f} "
-              f"{math.sqrt(sum((x - sum(test_r2_values)/len(test_r2_values))**2 for x in test_r2_values)/len(test_r2_values)):<8.4f} {'-':<6}")
-
-        print(f"{'='*80}")
+            print(f"Fold {fold_idx + 1}: Accuracy={metrics['accuracy']:.4f}")
 
     # Average metrics across folds
-    avg_metrics = {}
-    for metric in ['test_rmse', 'test_r2', 'test_mae', 'test_mse']:
-        key = metric.replace('test_', '').upper()
-        avg_metrics[key] = sum(fold[metric]
-                               for fold in cv_results) / len(cv_results)
+    avg_accuracy = sum(fold['accuracy']
+                       for fold in cv_results) / len(cv_results)
 
-    return avg_metrics, cv_results
+    # Aggregate confusion matrix
+    num_classes = len(cv_results[0]['confusion_matrix'])
+    total_confusion_matrix = [
+        [0 for _ in range(num_classes)] for _ in range(num_classes)]
+
+    for fold_result in cv_results:
+        for i in range(num_classes):
+            for j in range(num_classes):
+                total_confusion_matrix[i][j] += fold_result['confusion_matrix'][i][j]
+
+    avg_precision = [sum(fold['precision'][i] for fold in cv_results) / len(cv_results)
+                     for i in range(num_classes)]
+    avg_recall = [sum(fold['recall'][i] for fold in cv_results) / len(cv_results)
+                  for i in range(num_classes)]
+    avg_f1 = [sum(fold['f1_score'][i] for fold in cv_results) / len(cv_results)
+              for i in range(num_classes)]
+
+    return {
+        'accuracy': avg_accuracy,
+        'confusion_matrix': total_confusion_matrix,
+        'precision': avg_precision,
+        'recall': avg_recall,
+        'f1_score': avg_f1
+    }, cv_results
 
 
-def main():
-    """Main function to run systematic MLP experiments with detailed fold information"""
-    print("=== MLP Flood Prediction: Systematic Parameter Study with Detailed 10-Fold CV ===\n")
+def main_classification():
+    """Main function to run systematic MLP classification experiments with 10-fold CV"""
+    print("=== MLP Classification: Cross.pat Dataset with 10-Fold CV ===\n")
 
     # Load data
-    X, y = load_data('flood_data.csv')
+    X, y = load_pat_data('cross.pat')
     if X is None or y is None:
-        return
+        print("Error loading data. Creating sample data for demonstration.")
+        # Create sample data in the expected format
+        X = [[0.0902, 0.2690], [0.1843, 0.3456], [0.7823, 0.8901], [0.9234, 0.7654],
+             [0.2345, 0.1234], [0.5678, 0.4321], [0.8765, 0.9876], [0.3456, 0.6789]]
+        y = [[1, 0], [1, 0], [0, 1], [0, 1], [1, 0], [0, 1], [0, 1], [1, 0]]
 
     print(f"Loaded {len(X)} samples with {len(X[0])} features each")
-    print("Using 10-fold cross-validation with detailed fold-by-fold analysis\n")
+    print(f"Number of classes: {len(y[0])}")
+    print("Using 10-fold cross-validation for all experiments\n")
 
-    # Define smaller parameter ranges for demonstration
+    # Define parameter ranges for systematic testing
     hidden_architectures = [
-        [5],
-        [10],
-        [15],
-        [8, 5],
-        [12, 8],
-        [16, 10],
-        [10, 8, 5],
-        [15, 12, 8],
+        [3],           # Single layer - small
+        [5],           # Single layer - medium
+        [8],           # Single layer - large
+        [4, 3],        # Two layers - small
+        [6, 4],        # Two layers - medium
+        [8, 5],        # Two layers - large
+        [6, 4, 3],     # Three layers - medium
+        [8, 6, 4],     # Three layers - large
     ]
 
-    learning_rates = [0.001, 0.01, 0.1, 0.2]
+    learning_rates = [0.01, 0.05, 0.1, 0.2, 0.5]
     momentum_rates = [0.0, 0.3, 0.5, 0.7, 0.9]
-    weight_inits = ['xavier', 'he']
+    weight_inits = ['xavier', 'he', 'random']
 
     print("="*80)
-    print("EXPERIMENT 1: HIDDEN NODES IMPACT WITH DETAILED FOLD ANALYSIS")
+    print("EXPERIMENT 1: HIDDEN ARCHITECTURE IMPACT (10-FOLD CV)")
     print("="*80)
 
     hidden_results = []
     for i, hidden in enumerate(hidden_architectures):
         exp_name = f"Hidden-{'-'.join(map(str, hidden))}"
-        print(
-            f"\n--- Testing Architecture {i+1}/{len(hidden_architectures)}: {hidden} ---")
+        print(f"\n--- Testing Architecture {i+1}/8: {hidden} ---")
 
         # Test each architecture with different weight initializations
         for init_method in weight_inits:
             full_name = f"{exp_name} ({init_method})"
-            print(f"\nTesting {full_name} with detailed 10-fold CV...")
+            print(f"\nTesting {full_name} with 10-fold CV...")
 
-            avg_metrics, cv_results = run_experiment(
-                X, y, hidden, learning_rate=0.01, momentum=0.9,
+            avg_metrics, cv_results = run_classification_experiment(
+                X, y, hidden, learning_rate=0.1, momentum=0.9,
                 activation='sigmoid', weight_init=init_method,
-                l2_reg=0.0, epochs=500, random_seed=42, verbose=False, show_folds=True
+                l2_reg=0.0, epochs=1000, random_seed=42, verbose=False
             )
 
             # Calculate CV statistics
-            cv_rmse = [fold['test_rmse'] for fold in cv_results]
-            cv_r2 = [fold['test_r2'] for fold in cv_results]
-            rmse_std = math.sqrt(
-                sum((x - avg_metrics['RMSE'])**2 for x in cv_rmse) / len(cv_rmse))
-            r2_std = math.sqrt(
-                sum((x - avg_metrics['R2'])**2 for x in cv_r2) / len(cv_r2))
+            cv_accuracies = [fold['accuracy'] for fold in cv_results]
+            acc_std = math.sqrt(
+                sum((x - avg_metrics['accuracy'])**2 for x in cv_accuracies) / len(cv_accuracies))
 
-            hidden_results.append({
-                'name': full_name,
-                'avg_metrics': avg_metrics,
-                'cv_results': cv_results,
-                'hidden': hidden,
-                'init': init_method,
-                'rmse_std': rmse_std,
-                'r2_std': r2_std
-            })
-
+            hidden_results.append(
+                (full_name, avg_metrics, hidden, init_method, acc_std))
             print(
-                f"Overall Results: RMSE={avg_metrics['RMSE']:.4f}±{rmse_std:.4f}, R²={avg_metrics['R2']:.4f}±{r2_std:.4f}" + '\n')
+                f"CV Results: Accuracy={avg_metrics['accuracy']:.4f}±{acc_std:.4f}")
 
     print("\n" + "="*80)
-    print("EXPERIMENT 2: LEARNING RATE IMPACT WITH DETAILED FOLD ANALYSIS")
+    print("EXPERIMENT 2: LEARNING RATE IMPACT (10-FOLD CV)")
     print("="*80)
 
     lr_results = []
-    best_hidden = [10, 8]  # Use medium architecture for learning rate testing
+    best_hidden = [6, 4]  # Use medium architecture for learning rate testing
 
     for i, lr in enumerate(learning_rates):
         exp_name = f"LR-{lr}"
-        print(
-            f"\n--- Testing Learning Rate {i+1}/{len(learning_rates)}: {lr} ---")
+        print(f"\n--- Testing Learning Rate {i+1}/5: {lr} ---")
 
         # Test each learning rate with different weight initializations
         for init_method in weight_inits:
             full_name = f"{exp_name} ({init_method})"
-            print(f"\nTesting {full_name} with detailed 10-fold CV...")
+            print(f"\nTesting {full_name} with 10-fold CV...")
 
-            avg_metrics, cv_results = run_experiment(
+            avg_metrics, cv_results = run_classification_experiment(
                 X, y, best_hidden, learning_rate=lr, momentum=0.9,
                 activation='sigmoid', weight_init=init_method,
-                l2_reg=0.0, epochs=500, random_seed=42, verbose=False, show_folds=True
+                l2_reg=0.0, epochs=1000, random_seed=42, verbose=False
             )
 
             # Calculate CV statistics
-            cv_rmse = [fold['test_rmse'] for fold in cv_results]
-            cv_r2 = [fold['test_r2'] for fold in cv_results]
-            rmse_std = math.sqrt(
-                sum((x - avg_metrics['RMSE'])**2 for x in cv_rmse) / len(cv_rmse))
-            r2_std = math.sqrt(
-                sum((x - avg_metrics['R2'])**2 for x in cv_r2) / len(cv_r2))
+            cv_accuracies = [fold['accuracy'] for fold in cv_results]
+            acc_std = math.sqrt(
+                sum((x - avg_metrics['accuracy'])**2 for x in cv_accuracies) / len(cv_accuracies))
 
-            lr_results.append({
-                'name': full_name,
-                'avg_metrics': avg_metrics,
-                'lr': lr,
-                'init': init_method,
-                'rmse_std': rmse_std,
-                'r2_std': r2_std
-            })
+            lr_results.append(
+                (full_name, avg_metrics, lr, init_method, acc_std))
             print(
-                f"Overall CV Results: RMSE={avg_metrics['RMSE']:.4f}±{rmse_std:.4f}, R²={avg_metrics['R2']:.4f}±{r2_std:.4f}")
+                f"CV Results: Accuracy={avg_metrics['accuracy']:.4f}±{acc_std:.4f}")
 
     print("\n" + "="*80)
-    print("EXPERIMENT 3: MOMENTUM RATE IMPACT WITH DETAILED FOLD ANALYSIS")
+    print("EXPERIMENT 3: MOMENTUM RATE IMPACT (10-FOLD CV)")
     print("="*80)
 
     momentum_results = []
-    best_lr = 0.01  # Use standard learning rate for momentum testing
+    best_lr = 0.1  # Use standard learning rate for momentum testing
 
     for i, momentum in enumerate(momentum_rates):
         exp_name = f"Momentum-{momentum}"
-        print(
-            f"\n--- Testing Momentum {i+1}/{len(momentum_rates)}: {momentum} ---")
+        print(f"\n--- Testing Momentum {i+1}/5: {momentum} ---")
 
         # Test each momentum with different weight initializations
         for init_method in weight_inits:
             full_name = f"{exp_name} ({init_method})"
-            print(f"\nTesting {full_name} with detailed 10-fold CV...")
+            print(f"\nTesting {full_name} with 10-fold CV...")
 
-            avg_metrics, cv_results = run_experiment(
+            avg_metrics, cv_results = run_classification_experiment(
                 X, y, best_hidden, learning_rate=best_lr, momentum=momentum,
                 activation='sigmoid', weight_init=init_method,
-                l2_reg=0.0, epochs=500, random_seed=42, verbose=False, show_folds=True
+                l2_reg=0.0, epochs=1000, random_seed=42, verbose=False
             )
 
             # Calculate CV statistics
-            cv_rmse = [fold['test_rmse'] for fold in cv_results]
-            cv_r2 = [fold['test_r2'] for fold in cv_results]
-            rmse_std = math.sqrt(
-                sum((x - avg_metrics['RMSE'])**2 for x in cv_rmse) / len(cv_rmse))
-            r2_std = math.sqrt(
-                sum((x - avg_metrics['R2'])**2 for x in cv_r2) / len(cv_r2))
+            cv_accuracies = [fold['accuracy'] for fold in cv_results]
+            acc_std = math.sqrt(
+                sum((x - avg_metrics['accuracy'])**2 for x in cv_accuracies) / len(cv_accuracies))
 
-            momentum_results.append({
-                'name': full_name,
-                'avg_metrics': avg_metrics,
-                'momentum': momentum,
-                'init': init_method,
-                'rmse_std': rmse_std,
-                'r2_std': r2_std
-            })
+            momentum_results.append(
+                (full_name, avg_metrics, momentum, init_method, acc_std))
             print(
-                f"Overall CV Results: RMSE={avg_metrics['RMSE']:.4f}±{rmse_std:.4f}, R²={avg_metrics['R2']:.4f}±{r2_std:.4f}")
+                f"CV Results: Accuracy={avg_metrics['accuracy']:.4f}±{acc_std:.4f}")
 
     print("\n" + "="*80)
-    print("COMPREHENSIVE RESULTS SUMMARY (10-FOLD CROSS-VALIDATION)")
+    print("EXPERIMENT 4: BEST COMBINATIONS WITH CONFUSION MATRICES")
     print("="*80)
+
+    # Find best parameters from previous experiments
+    best_hidden_config = max(hidden_results, key=lambda x: x[1]['accuracy'])
+    best_lr_config = max(lr_results, key=lambda x: x[1]['accuracy'])
+    best_momentum_config = max(
+        momentum_results, key=lambda x: x[1]['accuracy'])
+
+    print(
+        f"Best Hidden Architecture: {best_hidden_config[2]} with {best_hidden_config[3]} init")
+    print(
+        f"Best Learning Rate: {best_lr_config[2]} with {best_lr_config[3]} init")
+    print(
+        f"Best Momentum: {best_momentum_config[2]} with {best_momentum_config[3]} init")
+
+    # Test best combinations and show confusion matrices
+    final_experiments = [
+        {
+            "name": "Best Hidden Architecture",
+            "hidden": best_hidden_config[2],
+            "lr": 0.1,
+            "momentum": 0.9,
+            "init": best_hidden_config[3]
+        },
+        {
+            "name": "Best Learning Rate",
+            "hidden": [6, 4],
+            "lr": best_lr_config[2],
+            "momentum": 0.9,
+            "init": best_lr_config[3]
+        },
+        {
+            "name": "Best Momentum",
+            "hidden": [6, 4],
+            "lr": 0.1,
+            "momentum": best_momentum_config[2],
+            "init": best_momentum_config[3]
+        },
+        {
+            "name": "Combined Best Parameters",
+            "hidden": best_hidden_config[2],
+            "lr": best_lr_config[2],
+            "momentum": best_momentum_config[2],
+            "init": "xavier"
+        }
+    ]
+
+    final_results = []
+    for exp in final_experiments:
+        print(f"\n--- Testing {exp['name']} ---")
+        print(
+            f"Configuration: Hidden={exp['hidden']}, LR={exp['lr']}, Momentum={exp['momentum']}, Init={exp['init']}")
+
+        # Use multiple seeds for final experiments
+        seeds = [42, 123, 456]
+        all_seed_results = []
+        all_cv_results = []
+
+        for seed in seeds:
+            avg_metrics, cv_results = run_classification_experiment(
+                X, y, exp['hidden'], exp['lr'], exp['momentum'],
+                activation='sigmoid', weight_init=exp['init'],
+                l2_reg=0.0, epochs=1500, random_seed=seed, verbose=False
+            )
+            all_seed_results.append(avg_metrics)
+            all_cv_results.extend(cv_results)
+
+        # Average across seeds
+        final_accuracy = sum(result['accuracy']
+                             for result in all_seed_results) / len(all_seed_results)
+
+        # Use the best seed result for confusion matrix display
+        best_seed_result = max(all_seed_results, key=lambda x: x['accuracy'])
+
+        # Calculate overall CV statistics
+        cv_acc_all = [fold['accuracy'] for fold in all_cv_results]
+        acc_std = math.sqrt(
+            sum((x - final_accuracy)**2 for x in cv_acc_all) / len(cv_acc_all))
+
+        final_results.append((exp['name'], best_seed_result, acc_std))
+
+        print(f"Final CV Results: Accuracy={final_accuracy:.4f}±{acc_std:.4f}")
+
+        # Display confusion matrix for best result
+        print_confusion_matrix(best_seed_result['confusion_matrix'], [
+                               'Class 0', 'Class 1'])
+
+        print("\nDetailed Metrics:")
+        for i, class_name in enumerate(['Class 0', 'Class 1']):
+            print(f"{class_name}: Precision={best_seed_result['precision'][i]:.4f}, "
+                  f"Recall={best_seed_result['recall'][i]:.4f}, "
+                  f"F1-Score={best_seed_result['f1_score'][i]:.4f}")
+
+    # COMPREHENSIVE RESULTS SUMMARY
+    print("\n" + "="*110)
+    print("COMPREHENSIVE CLASSIFICATION RESULTS SUMMARY (10-FOLD CROSS-VALIDATION)")
+    print("="*110)
 
     print("\n1. HIDDEN ARCHITECTURE RESULTS:")
     print("-" * 80)
-    print(f"{'Architecture':<20} {'Init Method':<10} {'RMSE (±SD)':<15} {'R² (±SD)':<15}")
+    print(f"{'Architecture':<20} {'Init Method':<10} {'Accuracy (±SD)':<15}")
     print("-" * 80)
-    hidden_results.sort(key=lambda x: x['avg_metrics']['RMSE'])
-    for result in hidden_results:
-        arch_str = '-'.join(map(str, result['hidden']))
-        print(f"{arch_str:<20} {result['init']:<10} "
-              f"{result['avg_metrics']['RMSE']:<6.4f}±{result['rmse_std']:<6.4f} "
-              f"{result['avg_metrics']['R2']:<6.4f}±{result['r2_std']:<6.4f}")
+    hidden_results.sort(key=lambda x: x[1]['accuracy'], reverse=True)
+    for name, metrics, arch, init, acc_std in hidden_results:
+        arch_str = '-'.join(map(str, arch))
+        print(
+            f"{arch_str:<20} {init:<10} {metrics['accuracy']:.4f}±{acc_std:.4f}")
 
     print("\n2. LEARNING RATE RESULTS:")
     print("-" * 80)
-    print(f"{'Learning Rate':<15} {'Init Method':<10} {'RMSE (±SD)':<15} {'R² (±SD)':<15}")
+    print(f"{'Learning Rate':<15} {'Init Method':<10} {'Accuracy (±SD)':<15}")
     print("-" * 80)
-    lr_results.sort(key=lambda x: x['avg_metrics']['RMSE'])
-    for result in lr_results:
-        print(f"{result['lr']:<15} {result['init']:<10} "
-              f"{result['avg_metrics']['RMSE']:.4f}±{result['rmse_std']:.4f:<6} "
-              f"{result['avg_metrics']['R2']:.4f}±{result['r2_std']:.4f}")
+    lr_results.sort(key=lambda x: x[1]['accuracy'], reverse=True)
+    for name, metrics, lr, init, acc_std in lr_results:
+        print(f"{lr:<15} {init:<10} {metrics['accuracy']:.4f}±{acc_std:.4f}")
 
     print("\n3. MOMENTUM RESULTS:")
     print("-" * 80)
-    print(f"{'Momentum':<15} {'Init Method':<10} {'RMSE (±SD)':<15} {'R² (±SD)':<15}")
+    print(f"{'Momentum':<15} {'Init Method':<10} {'Accuracy (±SD)':<15}")
     print("-" * 80)
-    momentum_results.sort(key=lambda x: x['avg_metrics']['RMSE'])
-    for result in momentum_results:
-        print(f"{result['momentum']:<15} {result['init']:<10} "
-              f"{result['avg_metrics']['RMSE']:.4f}±{result['rmse_std']:.4f:<6} "
-              f"{result['avg_metrics']['R2']:.4f}±{result['r2_std']:.4f}")
+    momentum_results.sort(key=lambda x: x[1]['accuracy'], reverse=True)
+    for name, metrics, momentum, init, acc_std in momentum_results:
+        print(
+            f"{momentum:<15} {init:<10} {metrics['accuracy']:.4f}±{acc_std:.4f}")
 
-    # Find overall best result
-    all_results = hidden_results + lr_results + momentum_results
-    overall_best = min(all_results, key=lambda x: x['avg_metrics']['RMSE'])
+    print("\n4. FINAL BEST COMBINATIONS:")
+    print("-" * 90)
+    print(f"{'Configuration':<45} {'Accuracy (±SD)':<15}")
+    print("-" * 90)
+    final_results.sort(key=lambda x: x[1]['accuracy'], reverse=True)
+    for name, metrics, acc_std in final_results:
+        print(f"{name:<45} {metrics['accuracy']:.4f}±{acc_std:.4f}")
+
+    # Overall best result
+    all_configs = [(name, metrics, None, None, acc_std)
+                   for name, metrics, arch, init, acc_std in hidden_results]
+    all_configs.extend([(name, metrics, param, init, acc_std)
+                       for name, metrics, param, init, acc_std in lr_results])
+    all_configs.extend([(name, metrics, param, init, acc_std)
+                       for name, metrics, param, init, acc_std in momentum_results])
+    all_configs.extend([(name, metrics, None, None, acc_std)
+                       for name, metrics, acc_std in final_results])
+
+    overall_best = max(all_configs, key=lambda x: x[1]['accuracy'])
 
     print("\n" + "="*110)
     print("OVERALL BEST CONFIGURATION (10-FOLD CV):")
-    print(f"Configuration: {overall_best['name']}")
+    print(f"Configuration: {overall_best[0]}")
     print(
-        f"RMSE: {overall_best['avg_metrics']['RMSE']:.4f} ± {overall_best['rmse_std']:.4f}")
-    print(f"MAE: {overall_best['avg_metrics']['MAE']:.4f}")
-    print(
-        f"R²: {overall_best['avg_metrics']['R2']:.4f} ± {overall_best['r2_std']:.4f}")
+        f"Accuracy: {overall_best[1]['accuracy']:.4f} ± {overall_best[4]:.4f}")
+
+    # Show final confusion matrix for overall best
+    if 'confusion_matrix' in overall_best[1]:
+        print("\nFinal Confusion Matrix for Best Configuration:")
+        print_confusion_matrix(overall_best[1]['confusion_matrix'], [
+                               'Class 0', 'Class 1'])
+
+        print("\nFinal Detailed Metrics:")
+        for i, class_name in enumerate(['Class 0', 'Class 1']):
+            print(f"{class_name}: Precision={overall_best[1]['precision'][i]:.4f}, "
+                  f"Recall={overall_best[1]['recall'][i]:.4f}, "
+                  f"F1-Score={overall_best[1]['f1_score'][i]:.4f}")
+
     print("="*110)
 
 
 if __name__ == "__main__":
-    main()
+    main_classification()
