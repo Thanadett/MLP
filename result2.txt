@@ -1,8 +1,7 @@
-=== MLP Classification: Cross.pat Dataset with 10-Fold CV ===
+=========== MLP Classification: Cross.pat Dataset ===========
 
 Loaded 200 samples with 2 features each
 Number of classes: 2
-Using 10-fold cross-validation for all experiments
 
 ================================================================================
 EXPERIMENT 1: HIDDEN LAYER

@@ -3,7 +3,7 @@
 Loaded 314 samples with 8 features each
 
 ================================================================================
-EXPERIMENT 1: HIDDEN LAYER
+EXPERIMENT 1: HIDDEN LAYER & NODE
 ================================================================================
 
 --- Testing Architecture 1/6: [5] ---

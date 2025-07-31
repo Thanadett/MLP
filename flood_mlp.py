@@ -6,14 +6,19 @@ import csv
 
 class MLP:
     def __init__(self, input_size, hidden_size, output_size, learning_rate=0.01, momentum=0.9, l2_reg=0.0):
-        """Initialize the MLP model with given parameters"""
+        """กำหนดค่าเริ่มต้นให้กับโมเดล MLP"""
+
+        # ขนาดของ input, hidden layers และ output layer
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.output_size = output_size
+
+         # ค่าพารามิเตอร์
         self.learning_rate = learning_rate
         self.momentum = momentum
         self.l2_reg = l2_reg
 
+        # โครงสร้าง layers 
         self.layers = [input_size] + hidden_size + [output_size]
         self.num_layers = len(self.layers)
 
@@ -28,7 +33,9 @@ class MLP:
         self._initialize_weights()
 
     def _initialize_weights(self, weight_init_method='xavier'):
-        """Initialize weights and biases based on the specified method"""
+        """ค่าเริ่มต้นสำหรบ weights และ biases"""
+
+        # เคลียร์ค่าก่อนหน้า
         self.weights = []
         self.biases = []
         self.prev_weights_deltas = []
@@ -38,6 +45,7 @@ class MLP:
             input_size = self.layers[i]
             output_size = self.layers[i + 1]
 
+            # กำหนดค่า weight ตามวิธีที่เลือก
             if weight_init_method == 'xavier':
                 limit = math.sqrt(6.0 / (input_size + output_size))
                 weights = [
@@ -54,7 +62,7 @@ class MLP:
                 raise ValueError(
                     f"Unsupported weight initialization method: {weight_init_method}")
 
-            # Initialize biases to small random values
+            # สร้าง bias เป็นค่าระหว่าง -0.1 ถึง 0.1 แบบสุ่ม
             biases = [random.uniform(-0.1, 0.1) for _ in range(output_size)]
 
             self.weights.append(weights)
@@ -66,11 +74,9 @@ class MLP:
             self.prev_biases_deltas.append([0.0 for _ in range(output_size)])
 
     def reset_weights(self, weight_init_method='xavier'):
-        """Public method to reinitialize weights and biases."""
         self._initialize_weights(weight_init_method)
 
     def _sigmoid(self, x):
-        """Sigmoid activation function with improved overflow handling"""
         x = max(-500, min(500, x))  # Clamp to prevent overflow
         try:
             return 1.0 / (1.0 + math.exp(-x))
@@ -78,11 +84,10 @@ class MLP:
             return 0.0 if x < 0 else 1.0
 
     def _sigmoid_derivative(self, x):
-        """Derivative of the sigmoid function"""
         return x * (1.0 - x)
 
     def _forward(self, inputs, activation_function='sigmoid'):
-        """Forward pass through the network with improved gradient tracking"""
+        """forward pass input layer ไปยัง output layer โดยใช้ activation function"""
         self.activations = [inputs[:]]
         self.z_values = []  # Store pre-activation values
         current_inputs = inputs[:]
@@ -115,8 +120,8 @@ class MLP:
         return current_inputs
 
     def _backward(self, target, activation_function='sigmoid'):
-        """Backward pass through the network with fixed gradient calculation"""
-        # Calculate output layer error
+        """Backward pass คำนวณ gradient & Update weight, bias ของแต่ละเลเยอร์"""
+
         output_error = []
         for i in range(len(target)):
             error = target[i] - self.activations[-1][i]
@@ -130,18 +135,16 @@ class MLP:
 
         layer_errors = [output_error]
 
-        # Backpropagate errors through hidden layers
         for layer_idx in range(len(self.weights) - 2, -1, -1):
             current_error = []
 
             for neuron_idx in range(len(self.weights[layer_idx])):
                 error = 0.0
-                # Sum errors from next layer
+
                 for next_neuron_idx in range(len(layer_errors[0])):
                     error += (layer_errors[0][next_neuron_idx] *
                               self.weights[layer_idx + 1][next_neuron_idx][neuron_idx])
 
-                # Apply derivative of activation function
                 if activation_function == 'sigmoid':
                     delta = error * \
                         self._sigmoid_derivative(
@@ -154,14 +157,12 @@ class MLP:
 
             layer_errors.insert(0, current_error)
 
-        # Update weights and biases with L2 regularization
         for layer_idx in range(len(self.weights)):
             for neuron_idx in range(len(self.weights[layer_idx])):
                 for weight_idx in range(len(self.weights[layer_idx][neuron_idx])):
-                    # Fixed: Use correct activation for input
+                    
                     input_to_use = self.activations[layer_idx][weight_idx]
 
-                    # Calculate weight delta with L2 regularization
                     weight_delta = (
                         self.learning_rate *
                         layer_errors[layer_idx][neuron_idx] * input_to_use
@@ -198,7 +199,6 @@ class MLP:
         for epoch in range(epochs):
             total_error = 0.0
 
-            # Shuffle training data for better convergence
             training_pairs = list(zip(X, y))
             random.shuffle(training_pairs)
             X_shuffled, y_shuffled = zip(*training_pairs)
@@ -246,7 +246,6 @@ class MLP:
                     if verbose:
                         print(
                             f"Early stopping at epoch {epoch+1} with best val loss: {best_val_loss:.6f}")
-                    # Restore best weights
                     self.weights = best_weights
                     self.biases = best_biases
                     break
@@ -258,7 +257,6 @@ class MLP:
         return mse_history, val_loss_history
 
     def predict(self, X, activation_function='sigmoid'):
-        """Make predictions; auto-handle single or multiple inputs"""
         if isinstance(X[0], (int, float)):  # Single input vector
             return self._forward(X, activation_function)
         else:
@@ -266,6 +264,7 @@ class MLP:
 
 
 def load_data(file_path):
+    """Import .csv file"""
     X = []
     y = []
 
@@ -294,7 +293,7 @@ def load_data(file_path):
 
 
 def normalize_data(data):
-    """Normalize the data to the range [0, 1]"""
+    """min-max normalization to [0, 1]"""
     if len(data) == 0:
         return data, 0, 1
 
@@ -309,7 +308,7 @@ def normalize_data(data):
 
 
 def denormalize_data(normalized_data, min_val, max_val):
-    """Denormalize the data from the range [0, 1] back to original scale"""
+    """Denormalize data from [0, 1] back"""
     if max_val == min_val:
         return [min_val] * len(normalized_data)
 
@@ -520,7 +519,7 @@ def main():
     weight_inits = ['xavier', 'he']
 
     print("="*80)
-    print("EXPERIMENT 1: HIDDEN LAYER")
+    print("EXPERIMENT 1: HIDDEN LAYER & NODE")
     print("="*80)
 
     hidden_results = []

@@ -11,7 +11,7 @@ class MLP:
         self.output_size = output_size
         self.learning_rate = learning_rate
         self.momentum = momentum
-        self.l2_reg = l2_reg  # L2 regularization parameter
+        self.l2_reg = l2_reg  
 
         self.layers = [input_size] + hidden_size + [output_size]
         self.num_layers = len(self.layers)
@@ -22,12 +22,11 @@ class MLP:
         self.prev_biases_deltas = []
 
         self.activations = []
-        self.z_values = []  # Store pre-activation values for better gradient computation
+        self.z_values = []  
 
         self._initialize_weights()
 
     def _initialize_weights(self, weight_init_method='xavier'):
-        """Initialize weights and biases based on the specified method"""
         self.weights = []
         self.biases = []
         self.prev_weights_deltas = []
@@ -72,11 +71,9 @@ class MLP:
             self.prev_biases_deltas.append([0.0 for _ in range(output_size)])
 
     def reset_weights(self, weight_init_method='xavier'):
-        """Public method to reinitialize weights and biases."""
         self._initialize_weights(weight_init_method)
 
     def _sigmoid(self, x):
-        """Sigmoid activation function with improved overflow handling"""
         x = max(-500, min(500, x))  # Clamp to prevent overflow
         try:
             return 1.0 / (1.0 + math.exp(-x))
@@ -84,11 +81,10 @@ class MLP:
             return 0.0 if x < 0 else 1.0
 
     def _sigmoid_derivative(self, x):
-        """Derivative of the sigmoid function"""
         return x * (1.0 - x)
 
     def _forward(self, inputs, activation_function='sigmoid'):
-        """Forward pass through the network with improved gradient tracking"""
+        """Forward pass"""
         self.activations = [inputs[:]]
         self.z_values = []  # Store pre-activation values
         current_inputs = inputs[:]
@@ -121,7 +117,7 @@ class MLP:
         return current_inputs
 
     def _backward(self, target, activation_function='sigmoid'):
-        """Backward pass through the network with fixed gradient calculation"""
+        """Backward pass"""
         # Calculate output layer error
         output_error = []
         for i in range(len(target)):
@@ -192,7 +188,6 @@ class MLP:
 
     def train(self, X, y, epochs=1000, activation_function='sigmoid', verbose=True,
               X_val=None, y_val=None, patience=50, lr_decay=0.95, lr_decay_epochs=100):
-        """Train the network with improved features"""
         mse_history = []
         val_loss_history = []
         accuracy_history = []
@@ -274,14 +269,12 @@ class MLP:
         return mse_history, val_loss_history, accuracy_history
 
     def predict(self, X, activation_function='sigmoid'):
-        """Make predictions; auto-handle single or multiple inputs"""
         if isinstance(X[0], (int, float)):  # Single input vector
             return self._forward(X, activation_function)
         else:
             return [self._forward(x, activation_function) for x in X]
 
     def predict_class(self, X, activation_function='sigmoid'):
-        """Make class predictions"""
         predictions = self.predict(X, activation_function)
         if isinstance(X[0], (int, float)):  # Single input
             return predictions.index(max(predictions))
@@ -290,7 +283,7 @@ class MLP:
 
 
 def load_pat_data(file_path):
-    """Load data from a .pat file and return features and targets"""
+    """Load data .pat file"""
     X = []
     y = []
 
@@ -342,7 +335,6 @@ def denormalize_data(normalized_data, min_val, max_val):
 
 
 def cross_validate_classification(X, y, k=10):
-    """Perform k-fold cross-validation for classification"""
     fold_size = len(X) // k
     folds = []
 
@@ -368,7 +360,6 @@ def cross_validate_classification(X, y, k=10):
 
 
 def calculate_classification_metrics(y_true, y_pred):
-    """Calculate classification metrics including confusion matrix"""
     # Convert to class indices
     y_true_classes = [t.index(max(t)) for t in y_true]
     y_pred_classes = [p.index(max(p)) for p in y_pred]
@@ -440,7 +431,7 @@ def print_confusion_matrix(confusion_matrix, class_names=None):
     print("=" * 50)
 
     # Header
-    print(f"{'Actual\\Predicted':<15}", end="")
+    print("Actual\\Predicted".ljust(15), end="")
     for name in class_names:
         print(f"{name:<10}", end="")
     print()
@@ -537,8 +528,7 @@ def run_classification_experiment(X, y, hidden_layers, learning_rate, momentum, 
 
 
 def main_classification():
-    """Main function to run systematic MLP classification experiments with 10-fold CV"""
-    print("=== MLP Classification: Cross.pat Dataset with 10-Fold CV ===\n")
+    print("=========== MLP Classification: Cross.pat Dataset ===========\n")
 
     # Load data
     X, y = load_pat_data('cross.pat')
@@ -550,8 +540,7 @@ def main_classification():
         y = [[1, 0], [1, 0], [0, 1], [0, 1], [1, 0], [0, 1], [0, 1], [1, 0]]
 
     print(f"Loaded {len(X)} samples with {len(X[0])} features each")
-    print(f"Number of classes: {len(y[0])}")
-    print("Using 10-fold cross-validation for all experiments\n")
+    print(f"Number of classes: {len(y[0])}\n")
 
     # Define parameter ranges for systematic testing
     hidden_architectures = [
@@ -602,7 +591,7 @@ def main_classification():
     print("="*80)
 
     lr_results = []
-    best_hidden = [6, 4]  # Use medium architecture for learning rate testing
+    best_hidden = [6, 4]  
 
     for i, lr in enumerate(learning_rates):
         exp_name = f"LR-{lr}"
@@ -634,7 +623,7 @@ def main_classification():
     print("="*80)
 
     momentum_results = []
-    best_lr = 0.1  # Use standard learning rate for momentum testing
+    best_lr = 0.1 
 
     for i, momentum in enumerate(momentum_rates):
         exp_name = f"Momentum-{momentum}"
@@ -814,7 +803,7 @@ def main_classification():
     print(
         f"Accuracy: {overall_best[1]['accuracy']:.4f}")
 
-    # Show final confusion matrix for overall best
+    # Show final confusion matrix
     if 'confusion_matrix' in overall_best[1]:
         print("\nFinal Confusion Matrix for Best Configuration:")
         print_confusion_matrix(overall_best[1]['confusion_matrix'], [
